@@ -5,7 +5,7 @@ Stochastic gradient descent routine.
 import numpy as np
 import matplotlib.pyplot as plt
 
-from cost_func import Cost
+from .cost_func import Cost
 
 
 class Trainer(object):
@@ -81,6 +81,8 @@ class SGD(Trainer):
             X, y = X[self.eval_size:], y[self.eval_size:]
 
         batches_for_full_pass = X.shape[0] // self.batch_size
+
+        self._print_start()
 
         start = 0
         for i in range(n_iter):
@@ -210,11 +212,11 @@ class SGD(Trainer):
 
     def _print_update(self, i):
         """Print batch message."""
-        msg = "[%4i] %1.3f| "
+        msg = "[%3i] %.3f| "
         arg = [i + 1, self.loss[-1]]
 
         if self.eval_size is not None:
-            msg += "%1.2f : %1.2f |"
+            msg += "%1.2f:%1.2f |"
             arg.append(self.train_score[-1]); arg.append(self.test_score[-1])
 
         N = len(self.norms)
@@ -241,6 +243,16 @@ class SGD(Trainer):
             arg.append(k); arg.append(f)
 
         print(msg % tuple(arg))
+
+    def _print_start(self):
+        """Print column headings.
+        """
+        msg = "EPOCH  LOSS|"
+        if self.eval_size is not None:
+            msg += " TRN : TST |"
+
+        msg += "NODE: GRADIENT NORM ->"
+        print(msg)
 
     def _clean(self):
         """Create output arrays and clear temporary variables."""

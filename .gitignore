@@ -102,4 +102,4 @@ ENV/
 .idea/
 
 # Privat folders
-*dev/
+dev/

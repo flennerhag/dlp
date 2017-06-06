@@ -1,11 +1,12 @@
 import numpy as np
 
-from sgd import SGD, DSGD
-from graph import ComputationalGraph, Node
-from init import init_weights, init_bias
-from funcs import ReLu, PReLu, MatMul, MatAdd, sigmoid
-from cost_func import Norm
-from viz import plot_train_scores
+from deeplearn.sgd import DSGD, SGD
+from deeplearn.graph import ComputationalGraph, Node
+
+from deeplearn.cost_func import Norm
+from deeplearn.funcs import MatAdd, MatMul, PReLu, ReLu, sigmoid
+from deeplearn.init import init_bias, init_weights
+from deeplearn.viz import plot_train_scores
 
 from sklearn.datasets import make_classification
 

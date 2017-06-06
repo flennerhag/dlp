@@ -4,7 +4,7 @@ Cost functions.
 
 from numba import jit
 
-from funcs import sigmoid
+from .funcs import sigmoid
 
 
 class Cost(object):
