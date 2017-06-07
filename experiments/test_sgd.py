@@ -1,6 +1,7 @@
 import numpy as np
 
-from deeplearn.sgd import DSGD, SGD
+from deeplearn.train import Trainer
+from deeplearn.opts import GradientDescent, Momentum
 from deeplearn.graph import ComputationalGraph, Node
 
 from deeplearn.cost_func import Norm
@@ -130,15 +131,16 @@ def acc(y, p, sig=False, C=0.5):
     p = 1 * (p > C)
     return (p == y).sum() / y.shape[0]
 
-sgd = SGD(graph,
-          learning_rate=5*1e-3,
-          batch_size=100,
-          momentum=0.9999,
-          decay=1e-8,
-          eval_size=1000,
-          eval_ival=STEPSIZE,
-          eval_metric=acc,
-          )
+opt1 = GradientDescent(graph, 5*1e-3, 1e-8)
+opt2 = Momentum(graph, 5*1e-3, 0.9, 1e-8)
+
+sgd = Trainer(graph,
+              opt2,
+              batch_size=100,
+              eval_size=1000,
+              eval_ival=STEPSIZE,
+              eval_metric=acc,
+              )
 
 sgd.train(X, y, ITERS)
 

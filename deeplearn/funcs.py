@@ -206,7 +206,7 @@ class Normalize(Processing):
         inv_s = 1 / np.sqrt(self.s[-1] + self.e)
 
         dsdx = (2 / N) * ds.dot(X - self.u[-1])
-        ds =
+        ds = None
         du = G.dot(inv_s) + ds.dot()
 
         dX = G.dot(inv_s) - dsdx + du / N

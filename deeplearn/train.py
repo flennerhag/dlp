@@ -1,38 +1,87 @@
 """
-Stochastic gradient descent routine.
+Network trainer classes.
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 from .cost_func import Cost
+from .opts import GradientDescent, Momentum
+
+OPTIMIZERS = {'standard': GradientDescent,
+              'momentum': Momentum,
+              'nesterov': None
+              }
 
 
-class Trainer(object):
+class BatchGenerator(object):
+
+    """Generator for batches.
+    """
+
+    def __init__(self, X, y, shuffle, batch_size):
+        self.X = X
+        self.y = y
+        self.shuffle = shuffle
+        self.batch_size = batch_size
+        self.n = X.shape[0] // self.batch_size
+
+        self.i = 0
+        self.start = 0
+        self.stop = self.batch_size
+
+    def reset_batch(self):
+        """Reset batch counter."""
+        self.start = 0
+        self.stop = self.batch_size
+
+        if self.shuffle:
+            self._shuffle()
+
+    def get_next_batch(self):
+        """Get next batch"""
+        j = self.i % self.n
+        if j == 0:
+            self.reset_batch()
+
+        X_, y_ = self.X[self.start:self.stop], self.y[self.start:self.stop]
+
+        self.i += 1
+        self.start = self.stop
+        self.stop += self.batch_size
+
+        return X_, y_
+
+    def _shuffle(self):
+        """Shuffle training data."""
+        idx = np.random.permutation(self.X.shape[0])
+        self.X = self.X[idx]
+        self.y = self.y[idx]
+
+
+class NetworkTrainer(object):
 
     """Network trainer meta class.
     """
 
 
-class SGD(Trainer):
+class Trainer(NetworkTrainer):
 
-    """Stochastic Gradient Descent trainer.
+    """Base network trainer class.
     """
 
     def __init__(self,
                  graph,
-                 learning_rate=0.1,
-                 decay=0.,
-                 momentum=0.,
+                 optimizer,
                  batch_size=200,
                  shuffle=True,
                  eval_size=None,
-                 eval_ival=10,
+                 eval_ival=1,
                  eval_metric=None,
                  verbose=True):
+
         self.graph = graph
-        self.learning_rate = learning_rate
-        self.decay = decay
+        self.optimizer = optimizer
         self.batch_size = batch_size
         self.momentum = 0
         self.eval_size = eval_size
@@ -41,7 +90,6 @@ class SGD(Trainer):
         self.shuffle = shuffle
         self.verbose = verbose
 
-        self.W = None
         self.norms = None
         self.V_ = None
         self.v_ = None
@@ -60,6 +108,24 @@ class SGD(Trainer):
         Returns
             None: prints loss and gradient norm
         """
+        X, y = self._set_up(X, y)
+
+        batches = BatchGenerator(X, y, self.shuffle, self.batch_size)
+        for i in range(n_iter):
+
+            X_, y_ = batches.get_next_batch()
+            self._run_batch(X_, y_, i)
+
+            if self.verbose:
+                self._print_update(i)
+
+        # Clean up
+        self._clean()
+
+    def _set_up(self, X, y):
+        """Set up monitoring and partition eval."""
+        self._print_start()
+
         # Losses and gradient norm at each epoch
         self.loss = []
         self.test_score = []
@@ -70,43 +136,12 @@ class SGD(Trainer):
                        'node': n}
                       for n in self.graph.nodes]
 
-        if self.momentum != 0.:
-            self.W = {node: node.param.copy() for node in self.graph.nodes}
-
-        if self.shuffle:
-            X, y = self._shuffle(X, y)
-
+        # Validation and training set
         if self.eval_size is not None:
             self.V_, self.v_ = X[:self.eval_size], y[:self.eval_size]
             X, y = X[self.eval_size:], y[self.eval_size:]
 
-        batches_for_full_pass = X.shape[0] // self.batch_size
-
-        self._print_start()
-
-        start = 0
-        for i in range(n_iter):
-
-            j = i % batches_for_full_pass
-
-            if j == 0:
-                # Need to reset batch process
-                start = 0
-                if self.shuffle:
-                    X, y = self._shuffle(X, y)
-
-            # Grab batch. This is a view so no copying
-            stop = (start + self.batch_size)
-            X_, y_ = X[start:stop], y[start:stop]
-            start = stop
-
-            self._run_batch(X_, y_, i)
-
-            if self.verbose:
-                self._print_update(i)
-
-        # Clean up
-        self._clean()
+        return X, y
 
     def _run_batch(self, X, y, i):
         """Parameter update on one batch.
@@ -114,10 +149,6 @@ class SGD(Trainer):
         Args
             X (array): input batch
             y (array): batch labels
-
-        Returns
-            L (float): current loss
-            g (float): output layer's gradient norm
         """
         # Run a forward pass and backpropagate errors.
         self.graph.forward(X, y)
@@ -128,7 +159,8 @@ class SGD(Trainer):
         self.loss.append(L)
 
         # Run gradient updating of parameters
-        self._update(i)
+        self._update_norms()
+        self.optimizer.update()
 
         # Evaluate train and test set
         self._eval(i)
@@ -136,7 +168,7 @@ class SGD(Trainer):
         # Clear cache
         self.graph.clear()
 
-    def _update(self, i):
+    def _update_norms(self):
         """Update parameter."""
         for j, node in enumerate(self.graph.nodes):
 
@@ -153,17 +185,6 @@ class SGD(Trainer):
                 size = self._get_norm(node.param)
                 self.norms[j]['grad'].append(grad)
                 self.norms[j]['param'].append(size)
-
-                # Update parameters
-                if self.momentum == 0.:
-                    node.param -= self.learning_rate * node.grad_param
-                else:
-                    u = self.momentum
-                    self.W[node] = u * self.W[node] + node.grad_param
-                    node.param -= self.learning_rate * self.W[node]
-
-        # Update learning hyper-parameters
-        self.learning_rate *= (1. - self.decay)
 
     @staticmethod
     def _get_norm(X):
@@ -201,14 +222,6 @@ class SGD(Trainer):
             self.graph.forward(self.V_, self.v_)
             l = self._score_graph()
             self.test_score.append(l)
-
-    @staticmethod
-    def _shuffle(X, y):
-        """Shuffle training data."""
-        idx = np.random.permutation(X.shape[0])
-        X = X[idx]
-        y = y[idx]
-        return X, y
 
     def _print_update(self, i):
         """Print batch message."""
@@ -270,9 +283,9 @@ class SGD(Trainer):
             self.train_score = np.array(self.train_score, dtype=np.float32)
 
 
-class DSGD(SGD):
+class VisualTrainer(Trainer):
 
-    """Visual Stochastic Gradient Descent Trainer.
+    """Trainer class with visualization of parameters.
     """
 
     def __init__(self, graph, **kwargs):
