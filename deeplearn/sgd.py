@@ -158,9 +158,9 @@ class SGD(Trainer):
                 if self.momentum == 0.:
                     node.param -= self.learning_rate * node.grad_param
                 else:
-                    self.W[node] *= self.momentum
-                    self.W[node] -= self.learning_rate * node.grad_param
-                    node.param += self.W[node]
+                    u = self.momentum
+                    self.W[node] = u * self.W[node] + node.grad_param
+                    node.param -= self.learning_rate * self.W[node]
 
         # Update learning hyper-parameters
         self.learning_rate *= (1. - self.decay)
@@ -212,7 +212,7 @@ class SGD(Trainer):
 
     def _print_update(self, i):
         """Print batch message."""
-        msg = "[%3i] %.3f| "
+        msg = "[%i] %1.3f| "
         arg = [i + 1, self.loss[-1]]
 
         if self.eval_size is not None:
@@ -247,7 +247,7 @@ class SGD(Trainer):
     def _print_start(self):
         """Print column headings.
         """
-        msg = "EPOCH  LOSS|"
+        msg = "EPOCH  LOSS |"
         if self.eval_size is not None:
             msg += " TRN : TST |"
 

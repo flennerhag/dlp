@@ -133,7 +133,7 @@ def acc(y, p, sig=False, C=0.5):
 sgd = SGD(graph,
           learning_rate=5*1e-3,
           batch_size=100,
-          momentum=0.9,
+          momentum=0.9999,
           decay=1e-8,
           eval_size=1000,
           eval_ival=STEPSIZE,

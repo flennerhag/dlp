@@ -151,15 +151,15 @@ class PReLu(Activation):
 
 
 ###############################################################################
-# Connections
+# Processing
 
-class Connect(object):
+class Processing(object):
 
-    """Meta class for connecting units.
+    """Meta class for inter-stage processing units.
     """
 
 
-class DropConnect(Connect):
+class DropConnect(Processing):
 
     """Dropout element wise.
 
@@ -177,6 +177,41 @@ class DropConnect(Connect):
     @jit(nogil=True)
     def backprop(self, X, W, H, G):
         return
+
+
+class Normalize(Processing):
+
+    """Batch normalization gate.
+    """
+
+    def __init__(self, e=0.0001):
+        self.e = e
+        self.u = []
+        self.s = []
+
+    @jit(nogil=True)
+    def forward(self, X, W):
+        """Normalize batch before activation."""
+        u = X.mean(axis=0)
+        s = X.std(axis=0)
+        self.u.append(u); self.s.append(s)
+        X -= u
+        X /= (s + self.e)
+        return X
+
+    @jit(nogil=True)
+    def backprop(self, X, W, H, G):
+        """Backprop through normalization wrt X."""
+        N = X.shape[0]
+        inv_s = 1 / np.sqrt(self.s[-1] + self.e)
+
+        dsdx = (2 / N) * ds.dot(X - self.u[-1])
+        ds =
+        du = G.dot(inv_s) + ds.dot()
+
+        dX = G.dot(inv_s) - dsdx + du / N
+
+        return [dX, None]
 
 
 ###############################################################################
