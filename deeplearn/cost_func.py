@@ -32,6 +32,9 @@ class BernSig(Cost):
         Returns
             n (scalar): (1/2)|| Y - P ||^2.
         """
+        if Y is None:
+            return None
+
         Y = Y.ravel()
         P = P.ravel()
         H = np.multiply(1 - 2 * Y, P)
@@ -77,6 +80,9 @@ class Norm(Cost):
         Returns
             n (scalar): (1/2)|| Y - P ||^2.
         """
+        if Y is None:
+            return None
+
         Y = Y.ravel()
         P = P.ravel()
         H = Y - P

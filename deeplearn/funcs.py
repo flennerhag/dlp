@@ -159,24 +159,51 @@ class Processing(object):
     """
 
 
-class DropConnect(Processing):
+class DropOut(Processing):
 
-    """Dropout element wise.
+    """Dropout gate.
 
-    Class for element-wise Dropout.
+    This gate implements inverted Dropout.
+
+    Note:
+        If this gate is connected to an activation unit, the result is DropOut.
+        If connected to a weight matrix, the result is DropConnect.
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, p=0.5, dist=None, scale=False):
+        self.train = True
+
+        self.W = 0
+        self.p = p
+
+        self.scale = scale
+        if dist is not None:
+            self.dist = dist
+        else:
+            self.dist = np.random.rand
 
     @jit(nogil=True)
     def forward(self, X, W):
         """Randomly switch samples off."""
-        np.random.bernoulli()
+        if not self.train:
+            return X  # we scale by 1/p during training instead
+        else:
+            H = self.dist(*X.shape)
+
+            if self.scale:
+                m = H.max()
+                n = H.min()
+                H -= n
+                H /= m - n
+
+            self.W = (H < self.p) / self.p
+            return np.multiply(X, self.W)
 
     @jit(nogil=True)
     def backprop(self, X, W, H, G):
-        return
+        """Backpropagate through Dropout."""
+        # We just take the gradient and switch off the inactive units.
+        return [np.multiply(self.W, G), None]
 
 
 class Normalize(Processing):

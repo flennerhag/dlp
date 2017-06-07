@@ -151,7 +151,7 @@ class Trainer(NetworkTrainer):
             y (array): batch labels
         """
         # Run a forward pass and backpropagate errors.
-        self.graph.forward(X, y)
+        self.graph.forward(X, y, train=True)
         self.graph.backprop()
 
         # Store loss data
@@ -163,7 +163,7 @@ class Trainer(NetworkTrainer):
         self.optimizer.update()
 
         # Evaluate train and test set
-        self._eval(i)
+        self._eval(X, y, i)
 
         # Clear cache
         self.graph.clear()
@@ -209,18 +209,21 @@ class Trainer(NetworkTrainer):
 
             return L
 
-    def _eval(self, i):
+    def _eval(self, X, y, i):
         """Evaluate graph on train and test set with current params."""
         if (i % self.eval_ival == 0) and (self.eval_size is not None):
 
             # Score train set
+            self.graph.forward(X, y, train=False)
             l = self._score_graph()
             self.train_score.append(l)
+            self.graph.clear()
 
             # Score test set
-            self.graph.forward(self.V_, self.v_)
+            self.graph.forward(self.V_, self.v_, train=False)
             l = self._score_graph()
             self.test_score.append(l)
+            self.graph.clear()
 
     def _print_update(self, i):
         """Print batch message."""

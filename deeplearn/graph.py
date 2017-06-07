@@ -37,7 +37,7 @@ class ComputationalGraph(object):
 
         self.n_nodes += 1
 
-    def forward(self, X, y=None):
+    def forward(self, X, y=None, train=True):
         """Forward calculation though the graph with input matrix X.
 
         Args
@@ -55,7 +55,7 @@ class ComputationalGraph(object):
                 # No forward pass to be done on the InitNode - only holds X.
                 continue
 
-            node.forward()
+            node.forward(train=train)
 
         # Set flag to 1 (forward pass completed)
         self.flag = 1
@@ -137,9 +137,13 @@ class Node(object):
         self.operation = operation
         self.__cls__ = self.operation.__class__
 
-    def forward(self):
+    def forward(self, train=True):
         """Compute the state of the node in a forward pass."""
         X = self.get_state()
+
+        if hasattr(self.operation, "train"):
+            self.operation.train = train
+
         self.state = self.operation.forward(X, self.param)
 
     def backprop(self):
