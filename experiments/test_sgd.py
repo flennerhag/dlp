@@ -5,7 +5,7 @@ from deeplearn.opts import GradientDescent, Momentum, Nesterov, RMSProp, Adam
 from deeplearn.graph import ComputationalGraph, Node
 
 from deeplearn.cost_func import Norm
-from deeplearn.funcs import MatAdd, MatMul, PReLu, ReLu, sigmoid
+from deeplearn.funcs import MatAdd, MatMul, PReLu, sigmoid
 from deeplearn.init import init_bias, init_weights
 from deeplearn.viz import plot_train_scores
 
@@ -15,7 +15,7 @@ from sklearn.datasets import make_classification
 # Data and Network size
 
 OBS = int(1e6)
-ITERS = 1000
+ITERS = 10
 STEPSIZE = 10
 
 
@@ -87,7 +87,7 @@ node15 = Node(a5, PReLu(a5))
 
 node16 = Node(W6, MatMul())
 node17 = Node(b6, MatAdd())
-node18 = Node(a6, PReLu(a6))
+node18 = Node(a6, PReLu())
 
 node19 = Node(y, Norm())
 
@@ -131,20 +131,24 @@ def acc(y, p, sig=False, C=0.5):
     p = 1 * (p > C)
     return (p == y).sum() / y.shape[0]
 
-opt1 = GradientDescent(graph, 5*1e-3, 1e-8)
-opt2 = Momentum(graph, 5*1e-3, 0.9, 1e-8)
-opt3 = Nesterov(graph, 5*1e-3, 0.9, 1e-8)
-opt4 = RMSProp(graph, 5*1e-3, 0.9, 1e-8)
-opt5 = Adam(graph, 5*1e-3)
+opt1 = GradientDescent(graph)
+opt2 = Momentum(graph)
+opt3 = Nesterov(graph)
+opt4 = RMSProp(graph)
+opt5 = Adam(graph)
 
-sgd = Trainer(graph,
-              opt5,
-              batch_size=100,
-              eval_size=1000,
-              eval_ival=STEPSIZE,
-              eval_metric=acc,
-              )
 
-sgd.train(X, y, ITERS)
+for name, opt in zip(["SGD", "Momentum", "Nesterov", "RMSProp", "Adam"],
+                     [opt1, opt2, opt3, opt4, opt5]):
 
-plot_train_scores(sgd)
+    sgd = Trainer(graph,
+                  opt5,
+                  batch_size=100,
+                  eval_size=1000,
+                  eval_ival=STEPSIZE,
+                  eval_metric=acc,
+                  )
+
+    sgd.train(X, y, ITERS)
+
+    plot_train_scores(sgd, title=name)

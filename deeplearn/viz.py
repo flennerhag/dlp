@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def plot_train_scores(trainer, burn_in=0, figsize=(12, 5)):
+def plot_train_scores(trainer, burn_in=0, figsize=(12, 5), title=None):
     """Plot loss, train and test score and the gradient norm.
 
     Arg
@@ -26,6 +26,9 @@ def plot_train_scores(trainer, burn_in=0, figsize=(12, 5)):
     ival = trainer.eval_ival
 
     f, ax = plt.subplots(1, 3, figsize=figsize, sharex=True)
+
+    if title is not None:
+        f.suptitle(title)
 
     ax[0].set_title("Accuracy")
     ax[0].plot(range(burn_in, stop, ival),

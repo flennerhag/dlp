@@ -3,7 +3,6 @@ Optimization routines.
 """
 
 import numpy as np
-from copy import copy
 
 
 class Optimizer(object):
@@ -55,10 +54,7 @@ class Momentum(Optimizer):
             if node.param is None:
                 continue
 
-            try:
-                W[node] = node.param.copy()
-            except AttributeError:
-                W[node] = copy(node.param)
+            W[node] = 0
 
         return W
 
@@ -68,8 +64,8 @@ class Momentum(Optimizer):
             if node.param is None or node.grad_param is None:
                 continue
 
-            self.W[node] = self.u * self.W[node] + node.grad_param
-            node.param -= self.lr * self.W[node]
+            self.W[node] = self.u * self.W[node] - self.lr * node.grad_param
+            node.param += self.W[node]
 
         self.lr *= (1. - self.decay)
 
@@ -81,7 +77,6 @@ class Nesterov(Momentum):
 
     def __init__(self, graph, lr=1e-3, u=0.9, decay=0.):
         super(Nesterov, self).__init__(graph, lr, u, decay)
-        self.rho = self.lr * self.u
 
     def update(self):
         """Update nodes in graph."""
@@ -91,8 +86,8 @@ class Nesterov(Momentum):
 
             W_ = self.W[node]
 
-            self.W[node] = self.rho * self.W[node] - self.lr * node.grad_param
-            node.param += (1 + self.rho) * self.W[node] - self.rho * W_
+            self.W[node] = self.u * self.W[node] - self.lr * node.grad_param
+            node.param += (1 + self.u) * self.W[node] - self.u * W_
 
         self.lr *= (1. - self.decay)
 
@@ -127,9 +122,10 @@ class RMSProp(Optimizer):
         for node in self.graph.nodes:
             if node.param is None or node.grad_param is None:
                 continue
-            W = node.grad_param.ravel()
-            W = W.dot(W)
+
+            W = np.multiply(node.grad_param, node.grad_param)
             self.W[node] = self.u * self.W[node] + (1 - self.u) * W
+
             x = self.lr * node.grad_param / (np.sqrt(self.W[node]) + self.e)
             node.param -= x
 
@@ -171,16 +167,13 @@ class Adam(Optimizer):
             if node.param is None or node.grad_param is None:
                 continue
 
-            grad = node.grad_param
-
             # First moment
-            m1 = self.b1 * self.W1[node] + (1 - self.b1) * grad
+            m1 = self.b1 * self.W1[node] + (1 - self.b1) * node.grad_param
             m1 /= (1 - self.b1**self.i)
 
             # Second moment
-            g = grad.ravel()
-            g = g.dot(g)
-            m2 = self.b2 * self.W2[node] + (1 - self.b2) * g
+            grad = np.multiply(node.grad_param, node.grad_param)
+            m2 = self.b2 * self.W2[node] + (1 - self.b2) * grad
             m2 /= (1 - self.b2**self.i)
 
             node.param -= self.lr * m1 / (np.sqrt(m2) + self.e)

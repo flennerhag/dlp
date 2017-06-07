@@ -172,10 +172,9 @@ class Trainer(NetworkTrainer):
         """Update parameter."""
         for j, node in enumerate(self.graph.nodes):
 
-            if node.param is None and not issubclass(node.__cls__, Cost):
+            if node.__cls__.__name__ == "InitNode":
                 continue
-
-            if issubclass(node.__cls__, Cost):
+            elif node.param is None or issubclass(node.__cls__, Cost):
                 # Register the gradient wrt the input for the cost function
                 grad = self._get_norm(node.grad_input)
                 self.norms[j]['grad'].append(grad)
@@ -239,13 +238,13 @@ class Trainer(NetworkTrainer):
             j += 1
 
             cls = norm_dict["type"]
-            if issubclass(cls, Cost):
-                # Here we only want the size of the gradient wrt the input
-                f = norm_dict["grad"][-1]
-
-            elif cls.__name__ == "InitNode":
+            if cls.__name__ == "InitNode":
                 # Container class for input data is not of interest
                 continue
+
+            elif issubclass(cls, Cost) or norm_dict["node"].param is None:
+                # Here we only want the size of the gradient wrt the input
+                f = norm_dict["grad"][-1]
 
             else:
                 n = norm_dict["param"][-1]

@@ -2,6 +2,7 @@
 Cost functions.
 """
 
+import numpy as np
 from numba import jit
 
 from .funcs import sigmoid
