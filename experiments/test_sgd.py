@@ -1,7 +1,7 @@
 import numpy as np
 
 from deeplearn.train import Trainer
-from deeplearn.opts import GradientDescent, Momentum, Nesterov
+from deeplearn.opts import GradientDescent, Momentum, Nesterov, RMSProp, Adam
 from deeplearn.graph import ComputationalGraph, Node
 
 from deeplearn.cost_func import Norm
@@ -134,9 +134,11 @@ def acc(y, p, sig=False, C=0.5):
 opt1 = GradientDescent(graph, 5*1e-3, 1e-8)
 opt2 = Momentum(graph, 5*1e-3, 0.9, 1e-8)
 opt3 = Nesterov(graph, 5*1e-3, 0.9, 1e-8)
+opt4 = RMSProp(graph, 5*1e-3, 0.9, 1e-8)
+opt5 = Adam(graph, 5*1e-3)
 
 sgd = Trainer(graph,
-              opt3,
+              opt5,
               batch_size=100,
               eval_size=1000,
               eval_ival=STEPSIZE,
