@@ -145,7 +145,7 @@ for name, opt in zip(["SGD", "Momentum", "Nesterov", "RMSProp", "Adam"],
     graph = build_net()
 
     sgd = Trainer(graph,
-                  opt(graph, lr=5e-3, decay=1e-6),
+                  opt(graph, lr=5e-4, decay=1e-7),
                   batch_size=100,
                   eval_size=1000,
                   eval_ival=STEPSIZE,
