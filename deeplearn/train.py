@@ -227,7 +227,7 @@ class Trainer(NetworkTrainer):
 
     def _print_update(self, i):
         """Print batch message."""
-        msg = "[%i] %1.3f| "
+        msg = "[%3i] %1.3f| "
         arg = [i + 1, self.loss[-1]]
 
         if self.eval_size is not None:
@@ -262,7 +262,7 @@ class Trainer(NetworkTrainer):
     def _print_start(self):
         """Print column headings.
         """
-        msg = "EPOCH  LOSS |"
+        msg = "ITER  LOSS |"
         if self.eval_size is not None:
             msg += " TRN : TST |"
 
