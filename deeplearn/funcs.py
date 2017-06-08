@@ -14,6 +14,11 @@ def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
 
+def probmax(x, zero_index=True):
+    """Function selecting the class label with highest probability."""
+    i = 0 if zero_index else 1
+    return x.argmax(axis=1) + i
+
 ###############################################################################
 # Activations
 
