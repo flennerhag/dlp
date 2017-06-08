@@ -107,3 +107,76 @@ class Norm(Cost):
         n = Y.shape[0]
         H = Y.reshape(n, 1) - P
         return [- (1 / n) * H, None]
+
+
+class Softmax(Cost):
+
+    """ Cross-entropy of the Softmax function.
+    """
+
+    def __init__(self):
+        pass
+
+    @jit(nogil=True)
+    def forward(self, P, Y):
+        """Calculate the sigmoid element-wise in a forward pass.
+
+        -log softmax(z)_{y=i} = -log ( exp(z_i) / sum exp(z_j)
+                              = - z_i + log sum exp(z_j)
+
+        Args
+        inputs (tuple):
+            X (array): Class scores
+            W (None): Null argument for compatibility
+
+        Returns
+            Softmax (array): cross-entropy cost for each observation
+        """
+        if Y is None:
+            return None
+
+        Y = Y.astype(np.int32)
+
+        # Normalize
+        C = P.max(axis=1)
+        P -= C[:, np.newaxis]
+
+        # log of sum of normalized exponents
+        H = np.log(np.exp(P).sum(axis=1))
+
+        return np.mean(- P[np.arange(P.shape[0]), Y.ravel()].ravel() + H)
+
+    @jit(nogil=True)
+    def backprop(self, P, Y, H, G):
+        """Backpropagate through cross-entropy loss of softmax.
+
+        D_j [-log softmax(z)_{y=i}] = D[- z_i + log sum exp(z_j)]
+                                    = {
+                                        exp(z_j) / sum exp(z_k)      j neq i
+                                        -1 + exp(z_i) / sum exp(z_k) else
+                                       }
+
+
+        Args
+        X (None): Null argument for compatibility
+        W (None): Null argument for compatibility
+        H (array): the value of the ReLu (max{0, A})
+        G (array): Incoming gradient
+
+        Returns
+        dL (list):
+            [G, None], where G is the gradient of the cross-entropy of
+            the softmax. This is the softmax probability for each z_j \neq i,
+            and the softmax probability -1 for z_i.
+        """
+        # Normalize the Softmax
+        C = P.max(axis=1)
+        P -= C[:, np.newaxis]
+        P = np.exp(P)
+        G = P / P.sum(axis=1)[:, np.newaxis]
+
+        # Subtract 1 from the true label probabilities
+        Y = Y.astype(np.int32).ravel()
+        G[np.arange(G.shape[0]), Y] -= 1
+
+        return [(1 / G.shape[0]) * G, None]
