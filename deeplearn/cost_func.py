@@ -37,8 +37,8 @@ class BernSig(Cost):
 
         Y = Y.ravel()
         P = P.ravel()
-        H = np.multiply(1 - 2 * Y, P)
-        return np.mean(np.log(1 + np.exp(H)))
+        V = np.multiply(1 - 2 * Y, P)
+        return np.mean(np.log(1 + np.exp(V)))
 
     @jit(nogil=True)
     def backprop(self, P, Y, H, G):
@@ -56,8 +56,8 @@ class BernSig(Cost):
         """
         n = Y.shape[0]
         Y = Y.reshape(n, 1)
-        H = np.multiply(1 - 2 * Y, P)
-        return [(1 / n) * sigmoid(H), None]
+        V = np.multiply(1 - 2 * Y, P)
+        return [(1 / n) * sigmoid(V), None]
 
 
 class Norm(Cost):
@@ -85,9 +85,9 @@ class Norm(Cost):
 
         Y = Y.ravel()
         P = P.ravel()
-        H = Y - P
+        V = Y - P
 
-        C = H.dot(H)
+        C = V.dot(V)
         return (1 / (2 * Y.shape[0])) * C
 
     @jit(nogil=True)
@@ -105,8 +105,8 @@ class Norm(Cost):
             a null argument for compatibility.
         """
         n = Y.shape[0]
-        H = Y.reshape(n, 1) - P
-        return [- (1 / n) * H, None]
+        V = Y.reshape(n, 1) - P
+        return [- (1 / n) * V, None]
 
 
 class Softmax(Cost):
@@ -139,12 +139,12 @@ class Softmax(Cost):
 
         # Normalize
         C = P.max(axis=1)
-        P -= C[:, np.newaxis]
+        V = P - C[:, np.newaxis]
 
         # log of sum of normalized exponents
-        H = np.log(np.exp(P).sum(axis=1))
+        Z = np.log(np.exp(V).sum(axis=1))
 
-        return np.mean(- P[np.arange(P.shape[0]), Y.ravel()].ravel() + H)
+        return np.mean(- V[np.arange(V.shape[0]), Y.ravel()].ravel() + Z)
 
     @jit(nogil=True)
     def backprop(self, P, Y, H, G):
@@ -171,9 +171,9 @@ class Softmax(Cost):
         """
         # Normalize the Softmax
         C = P.max(axis=1)
-        P -= C[:, np.newaxis]
-        P = np.exp(P)
-        G = P / P.sum(axis=1)[:, np.newaxis]
+        V = P - C[:, np.newaxis]
+        V = np.exp(V)
+        G = V / V.sum(axis=1)[:, np.newaxis]
 
         # Subtract 1 from the true label probabilities
         Y = Y.astype(np.int32).ravel()

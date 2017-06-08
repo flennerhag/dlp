@@ -9,11 +9,13 @@ from numba import jit
 # Auxiliary functions
 
 
+@jit(nogil=True)
 def sigmoid(x):
     """The sigmoid activation function."""
     return 1 / (1 + np.exp(-x))
 
 
+@jit(nogil=True)
 def probmax(x, zero_index=True):
     """Function selecting the class label with highest probability."""
     i = 0 if zero_index else 1
@@ -89,10 +91,9 @@ class ReLu(Activation):
         Returns
         Relu (array): output array of size [n_samples, n_out_features]
         """
-        null = np.zeros(X.shape)
-        return np.fmax(X, null)
+        return np.maximum(X, 0)
 
-    @jit(nogil=True)
+#    @jit(nogil=True)
     def backprop(self, X, W, H, G):
         """Backpropagate through ReLu given incoming gradient G.
 
@@ -107,8 +108,9 @@ class ReLu(Activation):
             [B, None], where B is the backpropagated gradient of ReLu. This is
             the same as G but with b_{ij} = 0 if h_{ij} < 0.
         """
-        H = 1 * (H > 0)
-        return [np.multiply(H, G), None]
+        V = 1 * (H >= 0)
+        O = np.multiply(V, G)
+        return [O, None]
 
 
 class PReLu(Activation):
@@ -151,8 +153,8 @@ class PReLu(Activation):
         Hp = 1 * (H >= 0)
         Z = H < 0
         Hm = self.alpha * Z
-        H = Hp + Hm
-        return [np.multiply(H, G), np.multiply(H, Z).mean()]
+        V = Hp + Hm
+        return [np.multiply(V, G), np.multiply(V, Z).mean()]
 
 
 ###############################################################################
@@ -237,8 +239,8 @@ class Normalize(Processing):
         N = X.shape[0]
         inv_s = 1 / np.sqrt(self.s[-1] + self.e)
 
-        dsdx = (2 / N) * ds.dot(X - self.u[-1])
         ds = None
+        dsdx = (2 / N) * ds.dot(X - self.u[-1])
         du = G.dot(inv_s) + ds.dot()
 
         dX = G.dot(inv_s) - dsdx + du / N

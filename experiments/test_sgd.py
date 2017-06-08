@@ -5,7 +5,7 @@ from deeplearn.opts import GradientDescent, Momentum, Nesterov, RMSProp, Adam
 from deeplearn.graph import ComputationalGraph, Node
 
 from deeplearn.cost_func import Norm
-from deeplearn.funcs import MatAdd, MatMul, PReLu, sigmoid
+from deeplearn.funcs import MatAdd, MatMul, ReLu, sigmoid
 from deeplearn.init import init_bias, init_weights
 from deeplearn.viz import plot_train_scores
 
@@ -17,7 +17,6 @@ from sklearn.datasets import make_classification
 OBS = int(1e6)
 ITERS = 1000
 STEPSIZE = 10
-
 
 FEATS_0 = 10
 FEATS_1 = 1000
@@ -67,27 +66,27 @@ def build_net():
 
     node1 = Node(W1, MatMul())
     node2 = Node(b1, MatAdd())
-    node3 = Node(a1, PReLu(a1))
+    node3 = Node(None, ReLu())
 
     node4 = Node(W2, MatMul())
     node5 = Node(b2, MatAdd())
-    node6 = Node(a2, PReLu(a2))
+    node6 = Node(None, ReLu())
 
     node7 = Node(W3, MatMul())
     node8 = Node(b3, MatAdd())
-    node9 = Node(a3, PReLu(a3))
+    node9 = Node(None, ReLu())
 
     node10 = Node(W4, MatMul())
     node11 = Node(b4, MatAdd())
-    node12 = Node(a4, PReLu(a4))
+    node12 = Node(None, ReLu())
 
     node13 = Node(W5, MatMul())
     node14 = Node(b5, MatAdd())
-    node15 = Node(a5, PReLu(a5))
+    node15 = Node(None, ReLu())
 
     node16 = Node(W6, MatMul())
     node17 = Node(b6, MatAdd())
-    node18 = Node(a6, PReLu())
+    node18 = Node(None, ReLu())
 
     node19 = Node(y, Norm())
 

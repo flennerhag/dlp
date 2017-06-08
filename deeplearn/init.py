@@ -27,7 +27,7 @@ def init_weights(fan_in, fan_out, scale=1, resize=True, den=2, dist=None):
     return W.astype(np.float32)
 
 
-def init_bias(fan_out, scale=1, dist=None):
+def init_bias(fan_out, scale=0., dist=None):
     """
     Random initialization of bias vector.
 
