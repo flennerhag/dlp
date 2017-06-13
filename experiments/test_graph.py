@@ -2,7 +2,7 @@ import numpy as np
 
 from sklearn.datasets import make_classification
 
-from deeplearn.graph import ComputationalGraph, Gate, Variable
+from deeplearn.graph import ComputationalGraph, Gate, Variable, Input, Output
 
 from deeplearn.cost_func import Norm
 from deeplearn.funcs import MatAdd, MatMul, ReLu
@@ -36,7 +36,7 @@ b3 = init_bias(1, 0.)
 # Graph
 graph = ComputationalGraph()
 
-node_r0 = Variable()
+node_r0 = Input()
 
 node_w1 = Variable(W1)
 node_b1 = Variable(b1)
@@ -56,11 +56,11 @@ node_m3 = Gate(MatMul())
 node_a3 = Gate(MatAdd())
 node_r3 = Gate(ReLu())
 
-node_y = Variable(y)
+node_y = Output(y)
 node_L = Gate(Norm())
 
 # Initialize data node
-graph.add_node(node_r0, input_node=True)     # Node 0
+graph.add_node(node_r0)                      # Node 0
 graph.add_node(node_w1)                      # Node 1
 graph.add_node(node_b1)                      # Node 2
 graph.add_node(node_m1, [node_r0, node_w1])  # Node 3
@@ -79,7 +79,7 @@ graph.add_node(node_m3, [node_r2, node_w3])  # Node 13
 graph.add_node(node_a3, [node_m3, node_b3])  # Node 14
 graph.add_node(node_r3, [node_a3])           # Node 15
 
-graph.add_node(node_y, label_node=True)     # Node 16
+graph.add_node(node_y)                       # Node 16
 graph.add_node(node_L, [node_r3, node_y])    # Node 17
 
 

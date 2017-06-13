@@ -100,7 +100,7 @@ if __name__ == "__main__":
     net = build_net(True)
     opt = RMSProp(net, decay=1e-6)
     trainer = Trainer(net, opt,
-                      batch_size=100,
+                      batch_size=500,
                       eval_size=1000,
                       eval_ival=STEPSIZE,
                       eval_metric=err,

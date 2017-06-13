@@ -4,7 +4,7 @@ Simple feed forward network.
 
 from .conv import Convolution, Offset
 from .init import init_bias, init_weights, init_filter
-from .graph import ComputationalGraph, Variable, Gate
+from .graph import ComputationalGraph, Input, Output, Variable, Gate
 from .cost_func import Norm, Softmax, BernSig
 from .funcs import MatAdd, MatMul, ReLu, PReLu, Sigmoid, DropOut
 
@@ -32,9 +32,9 @@ class Sequential(Network):
         self._activations_ = list()
 
         # Initialize input node
-        input_node = Variable()
+        input_node = Input()
         self._activations_.append(input_node)
-        self.graph.add_node(input_node, input_node=True)
+        self.graph.add_node(input_node)
 
     def add_fc(self,
                fan_in,
@@ -112,8 +112,8 @@ class Sequential(Network):
 
     def add_cost(self, cost_type):
         """Add cost function."""
-        label_node = Variable()
-        self.graph.add_node(label_node, label_node=True)
+        label_node = Output()
+        self.graph.add_node(label_node)
 
         cost = COST[cost_type]()
         cost = Gate(cost)

@@ -26,21 +26,17 @@ class ComputationalGraph(object):
 
     def add_node(self,
                  node,
-                 parent_nodes=None,
-                 input_node=False,
-                 label_node=False):
+                 parent_nodes=None):
         """Add node to graph.
 
         Args
             node (Node): instance of the Node class
             parent_nodes (list, None): list of input nodes, or None
-            input_node (bool): whether node expects the input data
-            label_node (bool): whether node expect the label data
         """
         # Register if node requires external input
-        if input_node:
+        if isinstance(node, Input):
             self._input_nodes.append(node)
-        if label_node:
+        if isinstance(node, Output):
             self._output_nodes.append(node)
 
         # Set input and outputs
@@ -66,7 +62,7 @@ class ComputationalGraph(object):
             reverse (bool): whether to generate nodes in reverse.
 
         """
-        T = self._sort_topologically()
+        T = self.get_nodes()
         n = len(T) - 1
 
         for i in range(self.n_nodes):
@@ -74,16 +70,13 @@ class ComputationalGraph(object):
                 i = n - i
             yield T[i]
 
-    def _sort_topologically(self):
+    def get_nodes(self):
         """Return list of nodes sorted topologically for forward pass"""
-        T = {0: self.nodes[0]}
+        T = [self.nodes[0]]
 
         for i in range(self.n_nodes):
             n = T[i]
             outputs = n.get_output()
-
-            # Current key counter
-            s = max(T.keys())
 
             # Add all node specific inputs (parameters)
             inputs = [inp
@@ -92,17 +85,13 @@ class ComputationalGraph(object):
                       for inp in out.inputs
                       ]
             for inp in inputs:
-                if inp not in T.values():
-                    s += 1
-                    assert s not in T.keys()
-                    T[s] = inp
+                if inp not in T:
+                    T.append(inp)
 
             # Add all output nodes
             for out in outputs:
-                if out is not None and out not in T.values():
-                    s += 1
-                    assert s not in T.keys()
-                    T[s] = out
+                if out is not None and out not in T:
+                    T.append(out)
 
         return T
 
@@ -111,16 +100,14 @@ class ComputationalGraph(object):
 
         Args
             X (array): input array.
-            X (array): label array.
+            y (array): label array.
             train (bool): whether the forward pass if for training.
         """
         self._initialize(X, y)
 
         for node in self.sorted_topologically():
-            if isinstance(node, Variable):
-                continue
-
-            node.forward(train=train)
+            if isinstance(node, Gate):
+                node.forward(train=train)
 
         # Set flag to 1 (forward pass completed)
         self.flag = 1
@@ -128,13 +115,13 @@ class ComputationalGraph(object):
     def backprop(self):
         """Backward calculation.
 
-        Runs backprop on a forward pass of the graph.
+        Runs backpropagation on a forward pass of the graph.
         """
         if not self.flag == 1:
             raise ValueError("Need a forward pass to do backprop.")
 
         for node in self.sorted_topologically(reverse=True):
-            if node in self._input_nodes:
+            if isinstance(node, (Output, Input)):
                 continue
 
             node.backprop()
@@ -154,10 +141,8 @@ class ComputationalGraph(object):
 
         for node in self.nodes:
             if not isinstance(node, Variable):
+                # Do not clear the parameters
                 node.clear()
-
-        for n in self._input_nodes:
-            n.state = None
 
 
 ###############################################################################
@@ -199,24 +184,66 @@ class Node(object):
 
     def get_grad(self):
         """Get gradient of output node."""
-        if len(self.outputs) > 0:
-            out = [o.grad[self]
-                   for o in self.outputs
-                   if o.grad[self] is not None]
-            if len(out) == 0:
-                return None
-            if len(out) == 1:
-                return out[0]
-            else:
-                return np.add(*out)
+        out = [o.grad[self]
+               for o in self.outputs
+               if o.grad[self] is not None]
+
+        if len(out) == 0:
+            # This happens for cost function nodes
+            return None
+        if len(out) == 1:
+            # This is the default for gates
+            return out[0]
+        else:
+            # Can happen for gates of variables if several consumers
+            return np.add(*out)
+
+
+class Input(Node):
+
+    """Input node.
+
+    Input nodes contain the input data.
+
+    Args
+        X (array, None): input data
+    """
+
+    def __init__(self, X=None):
+        super(Input, self).__init__()
+        self.state = X
+        self.__cls__ = self.__class__
+
+    def clear(self):
+        """Clear state."""
+        self.state = None
+
+
+class Output(Node):
+
+    """Output node.
+
+    The output node contains the labels for the data at hand.
+
+    Args
+        X (array, None): labels
+    """
+
+    def __init__(self, X=None):
+        super(Output, self).__init__()
+        self.state = X
+        self.__cls__ = self.__class__
+
+    def clear(self):
+        """Clear state."""
+        self.state = None
 
 
 class Variable(Node):
 
     """Variable node.
 
-    Variable nodes contains either data or parameters. We only do
-    backprop updates on Variable nodes.
+    Variable nodes contain parameters to be backropagated.
 
     Args
         X (array, int, float): parameter

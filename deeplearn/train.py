@@ -5,7 +5,7 @@ Network trainer classes.
 import numpy as np
 
 from .cost_func import Cost
-from .graph import Gate, Variable
+from .graph import Gate, Variable, Output, Input
 from .networks import Network
 from .opts import GradientDescent, Momentum, Nesterov, RMSProp, Adam
 
@@ -96,12 +96,12 @@ class Trainer(NetworkTrainer):
         self.shuffle = shuffle
         self.verbose = verbose
 
-        self.norms = None
-        self.V_ = None
         self.v_ = None
+        self.V_ = None
+        self.loss = None
+        self.norms = None
         self.train_score = None
         self.test_score = None
-        self.loss = None
 
     def train(self, X, y, n_iter):
         """Run Stochastic Gradient Descent.
@@ -188,7 +188,7 @@ class Trainer(NetworkTrainer):
                 grad = self._get_norm(grad)
                 self.norms[j]['grad'].append(grad)
 
-            elif not isinstance(node, Gate):
+            elif isinstance(node, Variable):
                 grad = self._get_norm(node.grad)
 
                 if grad is not None:
@@ -224,7 +224,7 @@ class Trainer(NetworkTrainer):
                         self.graph.nodes[i].state
 
                 p = S[Gate]
-                y = S[Variable]
+                y = S[Output]
                 L = self.eval_metric(y, p)
 
             return L
@@ -232,18 +232,13 @@ class Trainer(NetworkTrainer):
     def _eval(self, X, y, i):
         """Evaluate graph on train and test set with current params."""
         if (i % self.eval_ival == 0) and (self.eval_size is not None):
-
-            # Score train set
-            self.graph.forward(X, y, train=False)
-            l = self._score_graph()
-            self.train_score.append(l)
-            self.graph.clear()
-
-            # Score test set
-            self.graph.forward(self.V_, self.v_, train=False)
-            l = self._score_graph()
-            self.test_score.append(l)
-            self.graph.clear()
+            for xval, yval, ls in zip([X, self.V_],
+                                      [y, self.v_],
+                                      [self.train_score, self.test_score]):
+                self.graph.forward(xval, yval, train=False)
+                l = self._score_graph()
+                ls.append(l)
+                self.graph.clear()
 
     def _print_update(self, i):
         """Print batch message."""
@@ -270,22 +265,15 @@ class Trainer(NetworkTrainer):
 
             # Else, check for variable node
             elif isinstance(node, Variable):
-                try:
-                    # Fails for input nodes
-                    n = norm_dict["param"][-1]
-                    d = norm_dict["grad"][-1]
-                except IndexError:
-                    continue
+                n = norm_dict["param"][-1]
+                d = norm_dict["grad"][-1]
 
                 # Get number of params
-                if not isinstance(node.state, np.ndarray):
-                    v = node.state
+                v = node.state
+                if isinstance(v, np.ndarray):
+                    v = np.prod(node.state.shape)
                 else:
-                    v = node.state.shape
-                    try:
-                        v = int(v[0] * v[1])
-                    except IndexError:
-                        v = v[0]
+                    v = 1
 
                 f = d / n if n != 0 else d
                 msg += "%i (%i): %.3f|"
@@ -296,11 +284,12 @@ class Trainer(NetworkTrainer):
     def _print_start(self):
         """Print column headings.
         """
-        msg = "ITER  LOSS |"
+        print("TRAINING NETWORK")
+        msg = "ITER  LOSS | "
         if self.eval_size is not None:
-            msg += " TRN : TST |"
+            msg += "TRN : TST |"
 
-        msg += "NODE: GRADIENT NORM ->"
+        msg += " JGRAD | NODE (PARAMS) PGRAD"
         print(msg)
 
     def _clean(self):
