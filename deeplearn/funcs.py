@@ -40,7 +40,7 @@ class Sigmoid(Activation):
         pass
 
     @jit(nogil=True)
-    def forward(self, X, W):
+    def forward(self, X):
         """Calculate the sigmoid element-wise in a forward pass.
 
         Args
@@ -54,7 +54,7 @@ class Sigmoid(Activation):
         return sigmoid(X)
 
     @jit(nogil=True)
-    def backprop(self, X, W, H, G):
+    def backprop(self, X, H, G):
         """Backpropagate through ReLu given incoming gradient G.
 
         Args
@@ -80,7 +80,7 @@ class ReLu(Activation):
         pass
 
     @jit(nogil=True)
-    def forward(self, X, W):
+    def forward(self, X):
         """Calculate the ReLu in a forward pass.
 
         Args
@@ -93,8 +93,8 @@ class ReLu(Activation):
         """
         return np.maximum(X, 0)
 
-#    @jit(nogil=True)
-    def backprop(self, X, W, H, G):
+    @jit(nogil=True)
+    def backprop(self, X, H, G):
         """Backpropagate through ReLu given incoming gradient G.
 
         Args
@@ -122,7 +122,7 @@ class PReLu(Activation):
         self.alpha = alpha
 
     @jit(nogil=True)
-    def forward(self, X, W):
+    def forward(self, X):
         """Calculate the ReLu in a forward pass.
 
         Args
@@ -136,7 +136,7 @@ class PReLu(Activation):
         return np.fmax(X, self.alpha * X)
 
     @jit(nogil=True)
-    def backprop(self, X, W, H, G):
+    def backprop(self, X, H, G):
         """Backpropagate through ReLu given incoming gradient G.
 
         Args
@@ -190,7 +190,7 @@ class DropOut(Processing):
             self.dist = np.random.rand
 
     @jit(nogil=True)
-    def forward(self, X, W):
+    def forward(self, X):
         """Randomly switch samples off."""
         if not self.train:
             return X  # we scale by 1/p during training instead
@@ -207,7 +207,7 @@ class DropOut(Processing):
             return np.multiply(X, self.W)
 
     @jit(nogil=True)
-    def backprop(self, X, W, H, G):
+    def backprop(self, X, H, G):
         """Backpropagate through Dropout."""
         # We just take the gradient and switch off the inactive units.
         return [np.multiply(self.W, G), None]
@@ -224,7 +224,7 @@ class Normalize(Processing):
         self.s = []
 
     @jit(nogil=True)
-    def forward(self, X, W):
+    def forward(self, X):
         """Normalize batch before activation."""
         u = X.mean(axis=0)
         s = X.std(axis=0)
@@ -234,7 +234,7 @@ class Normalize(Processing):
         return X
 
     @jit(nogil=True)
-    def backprop(self, X, W, H, G):
+    def backprop(self, X, H, G):
         """Backprop through normalization wrt X."""
         N = X.shape[0]
         inv_s = 1 / np.sqrt(self.s[-1] + self.e)

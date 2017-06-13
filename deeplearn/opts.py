@@ -3,6 +3,7 @@ Optimization routines.
 """
 
 import numpy as np
+from .graph import Variable
 from .networks import Network
 
 
@@ -30,10 +31,8 @@ class GradientDescent(Optimizer):
     def update(self):
         """Update nodes in graph."""
         for node in self.graph.nodes:
-            if node.param is None or node.grad_param is None:
-                continue
-
-            node.param -= self.lr * node.grad_param
+            if isinstance(node, Variable):
+                node.state -= self.lr * node.grad
 
         self.lr *= (1. - self.decay)
 
@@ -57,22 +56,19 @@ class Momentum(Optimizer):
         W = dict()
 
         for node in self.graph.nodes:
-
-            if node.param is None:
-                continue
-
-            W[node] = 0
+            if isinstance(node, Variable):
+                W[node] = 0
 
         return W
 
     def update(self):
         """Update nodes in graph."""
         for node in self.graph.nodes:
-            if node.param is None or node.grad_param is None:
+            if not isinstance(node, Variable):
                 continue
 
-            self.W[node] = self.u * self.W[node] - self.lr * node.grad_param
-            node.param += self.W[node]
+            self.W[node] = self.u * self.W[node] - self.lr * node.grad
+            node.state += self.W[node]
 
         self.lr *= (1. - self.decay)
 
@@ -88,13 +84,13 @@ class Nesterov(Momentum):
     def update(self):
         """Update nodes in graph."""
         for node in self.graph.nodes:
-            if node.param is None or node.grad_param is None:
+            if not isinstance(node, Variable):
                 continue
 
             W_ = self.W[node]
 
-            self.W[node] = self.u * self.W[node] - self.lr * node.grad_param
-            node.param += (1 + self.u) * self.W[node] - self.u * W_
+            self.W[node] = self.u * self.W[node] - self.lr * node.grad
+            node.state += (1 + self.u) * self.W[node] - self.u * W_
 
         self.lr *= (1. - self.decay)
 
@@ -115,26 +111,23 @@ class RMSProp(Optimizer):
     def _initialize(self):
         """Set up velocity vectors."""
         W = dict()
-
         for node in self.graph.nodes:
-
-            if node.param is None:
-                continue
-            W[node] = 0
+            if isinstance(node, Variable):
+                W[node] = 0
 
         return W
 
     def update(self):
         """Update nodes in graph."""
         for node in self.graph.nodes:
-            if node.param is None or node.grad_param is None:
+            if not isinstance(node, Variable) or node.grad is None:
                 continue
 
-            W = np.multiply(node.grad_param, node.grad_param)
+            W = np.multiply(node.grad, node.grad)
             self.W[node] = self.u * self.W[node] + (1 - self.u) * W
 
-            x = self.lr * node.grad_param / (np.sqrt(self.W[node]) + self.e)
-            node.param -= x
+            x = self.lr * node.grad / (np.sqrt(self.W[node]) + self.e)
+            node.state -= x
 
         self.lr *= (1. - self.decay)
 
@@ -158,32 +151,29 @@ class Adam(Optimizer):
         """Set up velocity vectors."""
         W1 = dict()
         W2 = dict()
-
         for node in self.graph.nodes:
-
-            if node.param is None:
-                continue
-            W1[node] = 0
-            W2[node] = 0
+            if isinstance(node, Variable):
+                W1[node] = 0
+                W2[node] = 0
 
         return W1, W2
 
     def update(self):
         """Update nodes in graph."""
         for node in self.graph.nodes:
-            if node.param is None or node.grad_param is None:
+            if not isinstance(node, Variable):
                 continue
 
             # First moment
-            m1 = self.b1 * self.W1[node] + (1 - self.b1) * node.grad_param
+            m1 = self.b1 * self.W1[node] + (1 - self.b1) * node.grad
             m1 /= (1 - self.b1**self.i)
 
             # Second moment
-            grad = np.multiply(node.grad_param, node.grad_param)
+            grad = np.multiply(node.grad, node.grad)
             m2 = self.b2 * self.W2[node] + (1 - self.b2) * grad
             m2 /= (1 - self.b2**self.i)
 
-            node.param -= self.lr * m1 / (np.sqrt(m2) + self.e)
+            node.state -= self.lr * m1 / (np.sqrt(m2) + self.e)
 
         self.lr *= (1. - self.decay)
         self.i += 1

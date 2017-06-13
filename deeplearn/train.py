@@ -3,15 +3,17 @@ Network trainer classes.
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 from .cost_func import Cost
+from .graph import Gate, Variable
 from .networks import Network
-from .opts import GradientDescent, Momentum
+from .opts import GradientDescent, Momentum, Nesterov, RMSProp, Adam
 
 OPTIMIZERS = {'standard': GradientDescent,
               'momentum': Momentum,
-              'nesterov': None
+              'nesterov': Nesterov,
+              'rmsprop': RMSProp,
+              'adam': Adam
               }
 
 
@@ -176,22 +178,29 @@ class Trainer(NetworkTrainer):
         """Update parameter."""
         for j, node in enumerate(self.graph.nodes):
 
-            if node.__cls__.__name__ == "InitNode":
-                continue
-            elif node.param is None or issubclass(node.__cls__, Cost):
-                # Register the gradient wrt the input for the cost function
-                grad = self._get_norm(node.grad_input)
+            if issubclass(node.__cls__, Cost):
+                grad = [g for g in node.grad.values() if g is not None]
+                if len(grad) > 1:
+                    grad = np.add(*grad)
+                else:
+                    grad = grad[0]
+
+                grad = self._get_norm(grad)
                 self.norms[j]['grad'].append(grad)
-            else:
-                # Register parameter and gradient norms
-                grad = self._get_norm(node.grad_param)
-                size = self._get_norm(node.param)
-                self.norms[j]['grad'].append(grad)
-                self.norms[j]['param'].append(size)
+
+            elif not isinstance(node, Gate):
+                grad = self._get_norm(node.grad)
+
+                if grad is not None:
+                    param = self._get_norm(node.state)
+                    self.norms[j]['grad'].append(grad)
+                    self.norms[j]['param'].append(param)
 
     @staticmethod
     def _get_norm(X):
         """Calculate norm."""
+        if X is None:
+            return
         try:
             size = np.linalg.norm(X.ravel())
         except AttributeError:
@@ -207,8 +216,15 @@ class Trainer(NetworkTrainer):
             if self.eval_metric is None:
                 L = self.graph.nodes[-1].state
             else:
-                p = self.graph.nodes[-2].state
-                y = self.graph.nodes[-1].param
+                S = {Variable: None,
+                     Gate: None}
+
+                for i in[-2, -3]:
+                    S[self.graph.nodes[i].__class__] = \
+                        self.graph.nodes[i].state
+
+                p = S[Gate]
+                y = S[Variable]
                 L = self.eval_metric(y, p)
 
             return L
@@ -243,23 +259,37 @@ class Trainer(NetworkTrainer):
         for norm_dict in reversed(self.norms):
             k = N - j
             j += 1
+            node = norm_dict["node"]
+            t = norm_dict["type"]
 
-            cls = norm_dict["type"]
-            if cls.__name__ == "InitNode":
-                # Container class for input data is not of interest
-                continue
-
-            elif issubclass(cls, Cost) or norm_dict["node"].param is None:
-                # Here we only want the size of the gradient wrt the input
-                f = norm_dict["grad"][-1]
-
-            else:
-                n = norm_dict["param"][-1]
+            # If cost function node, get gradient wrt input
+            if issubclass(t, Cost):
                 d = norm_dict["grad"][-1]
-                f = d / n if n != 0 else d
+                msg += " %.3f |"
+                arg.append(d)
 
-            msg += "%i: %.3f|"
-            arg.append(k); arg.append(f)
+            # Else, check for variable node
+            elif isinstance(node, Variable):
+                try:
+                    # Fails for input nodes
+                    n = norm_dict["param"][-1]
+                    d = norm_dict["grad"][-1]
+                except IndexError:
+                    continue
+
+                # Get number of params
+                if not isinstance(node.state, np.ndarray):
+                    v = node.state
+                else:
+                    v = node.state.shape
+                    try:
+                        v = int(v[0] * v[1])
+                    except IndexError:
+                        v = v[0]
+
+                f = d / n if n != 0 else d
+                msg += "%i (%i): %.3f|"
+                arg.append(k); arg.append(v); arg.append(f)
 
         print(msg % tuple(arg))
 
@@ -282,71 +312,8 @@ class Trainer(NetworkTrainer):
         for norm_dict in self.norms:
             for entry in ["grad", "param"]:
                 n = norm_dict[entry]
-                n = np.array(n, dtype=np.float32)
+                norm_dict[entry] = np.array(n, dtype=np.float32)
 
         if self.eval_size is not None:
             self.test_score = np.array(self.test_score, dtype=np.float32)
             self.train_score = np.array(self.train_score, dtype=np.float32)
-
-
-class VisualTrainer(Trainer):
-
-    """Trainer class with visualization of parameters.
-    """
-
-    def __init__(self, graph, **kwargs):
-        super(VisualTrainer, self).__init__(graph, verbose=False, **kwargs)
-        self.f = None
-        self.ax = None
-        self.pars = []
-
-        for node in self.graph.nodes:
-            if isinstance(node.param, np.ndarray):
-                if len(node.param.shape) > 1:
-                    self.pars.append(node)
-
-    def _run_batch(self, X, y, i):
-        """Visualization of batch processing."""
-        # Run a forward pass and backpropagate errors.
-        self.graph.forward(X, y)
-        self.graph.backprop()
-
-        # Store loss data
-        L = self.graph.nodes[-1].state
-        g = self.graph.nodes[-1].grad_input
-        g = np.sqrt(g.T.dot(g))[0, 0]
-        self.loss.append(L)
-        self.norm.append(g)
-
-        # Run gradient updating of parameters
-        for node in self.graph.nodes:
-            if node.param is not None and node.grad_param is not None:
-                self._update(node, i)
-
-        msg = "[%4i] %.2f | "
-        arg = [i, self.loss[-1]]
-
-        for j, node in enumerate(self.graph.nodes):
-            try:
-                m = node.grad_param
-            except:
-                continue
-
-            if m is not None:
-                if not isinstance(m, np.ndarray):
-                    m *= m
-                else:
-                    m = np.sqrt(np.mean(np.multiply(m, m)))
-
-                add = "(%i) %s: %.4f | "
-                msg += add
-                arg.append(j)
-                arg.append(node.operation.__class__.__name__)
-                arg.append(m)
-
-        print(msg % tuple(arg))
-
-        # Clear cache
-        self._eval(i)
-        self.graph.clear()
-

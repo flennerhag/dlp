@@ -14,9 +14,7 @@ def plot_train_scores(trainer, burn_in=0, figsize=(12, 5), title=None):
         burn_in (int, float): share of iterations (from 0) to skip
         figsize (tuple): figure size.
     """
-    i = len(trainer.graph.nodes)
-
-    gradient_norm = trainer.norms[i - 1]["grad"]
+    gradient_norm = trainer.norms[-1]["grad"]
     train_loss = trainer.loss
     train_score = trainer.train_score
     test_score = trainer.test_score

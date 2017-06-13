@@ -24,7 +24,7 @@ memory = Memory(os.path.join(get_data_home(), 'mnist_benchmark_data'),
 
 
 @memory.cache
-def load_data(dtype=np.float32, order='F'):
+def load_data(dtype=np.float32, order='C'):
     """Load the data, then cache and memmap the train/test split"""
     ######################################################################
     # Load dataset
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     net = build_net(True)
     opt = RMSProp(net, decay=1e-6)
     trainer = Trainer(net, opt,
-                      batch_size=500,
+                      batch_size=100,
                       eval_size=1000,
                       eval_ival=STEPSIZE,
                       eval_metric=err,

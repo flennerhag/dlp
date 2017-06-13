@@ -4,7 +4,7 @@ Simple feed forward network.
 
 from .conv import Convolution, Offset
 from .init import init_bias, init_weights, init_filter
-from .graph import ComputationalGraph, Node
+from .graph import ComputationalGraph, Variable, Gate
 from .cost_func import Norm, Softmax, BernSig
 from .funcs import MatAdd, MatMul, ReLu, PReLu, Sigmoid, DropOut
 
@@ -29,6 +29,12 @@ class Sequential(Network):
 
     def __init__(self):
         self.graph = ComputationalGraph()
+        self._activations_ = list()
+
+        # Initialize input node
+        input_node = Variable()
+        self._activations_.append(input_node)
+        self.graph.add_node(input_node, input_node=True)
 
     def add_fc(self,
                fan_in,
@@ -40,23 +46,35 @@ class Sequential(Network):
                activation="relu",
                act_arg=None):
         """Add fully connected layer to network."""
-        if input_node is None:
-            input_node = self.graph.n_nodes - 1
 
-        # MatMul gate
+        # Add weight matrix parameter to graph
         W = init_weights(fan_in, fan_out)
-        node = Node(W, MatMul())
-        self.graph.add_node(node, input_node)
+        param = Variable(W)
+        self.graph.add_node(param)
 
-        # MatAdd gate
+        # Add MatMul Gate to graph
+        if input_node is None:
+            input_node = self._activations_[-1]
+
+        matmul = Gate(MatMul())
+        self.graph.add_node(matmul, parent_nodes=[input_node, param])
+
         if bias:
-            input_node = self.graph.n_nodes - 1
+            input_node = self.graph.nodes[-1]
+
+            # Add bias parameter
             b = init_bias(fan_out, 0)
-            node = Node(b, MatAdd())
-            self.graph.add_node(node, input_node)
+            param = Variable(b)
+            self.graph.add_node(param)
+
+            matadd = Gate(MatAdd())
+            self.graph.add_node(matadd, parent_nodes=[input_node, param])
 
         if dropout:
+            # Add dropout connection
             self._connect(dropout_args)
+
+        # Add activation
         self._activate(activation, act_arg)
 
     def add_conv(self,
@@ -77,14 +95,14 @@ class Sequential(Network):
         # Convolution
         W = init_filter(*filter_size, n_filters)
 
-        node = Node(W, Convolution(n_filters, stride, pad))
+        node = Gate(Convolution(n_filters, stride, pad))
         self.graph.add_node(node, input_node)
 
         # bias (one per filter)
         if bias:
             input_node = self.graph.n_nodes - 1
             b = init_bias(n_filters).ravel()
-            node = Node(b, Offset())
+            node = Gate(Offset())
             self.graph.add_node(node, input_node)
 
         if dropout:
@@ -94,11 +112,14 @@ class Sequential(Network):
 
     def add_cost(self, cost_type):
         """Add cost function."""
-        input_node = self.graph.n_nodes - 1
+        label_node = Variable()
+        self.graph.add_node(label_node, label_node=True)
 
-        cost = COST[cost_type]
-        node = Node(None, cost())
-        self.graph.add_node(node, input_node)
+        cost = COST[cost_type]()
+        cost = Gate(cost)
+        input_node = self._activations_[-1]
+
+        self.graph.add_node(cost, parent_nodes=[input_node, label_node])
 
     def predict(self, X):
         """Predict X."""
@@ -110,19 +131,27 @@ class Sequential(Network):
 
     def _connect(self, dropout_args):
         """Add dropout connection."""
-        input_node = self.graph.n_nodes - 1
+        input_node = [self.graph.nodes[-1]]
 
-        node = Node(None, DropOut(*dropout_args))
-        self.graph.add_node(node, input_node)
+        connection = Gate(DropOut(*dropout_args))
+        self.graph.add_node(connection, parent_nodes=input_node)
 
     def _activate(self, activation, act_arg):
         """Add activation"""
-        input_node = self.graph.n_nodes - 1
+        input_node = [self.graph.nodes[-1]]
         op = ACTIVATIONS[activation]
 
         if act_arg is None:
-            node = Node(None, op())
+            activation = Gate(op())
+            self.graph.add_node(activation, parent_nodes=input_node)
         else:
-            node = Node(act_arg, op(act_arg))
+            # Add parameters as variable nodes
+            for arg in act_arg.values():
+                param = Variable(arg)
+                input_node.append(param)
+                self.graph.add_node(param)
 
-        self.graph.add_node(node, input_node)
+            activation = Gate(op(**act_arg))
+            self.graph.add_node(activation, parent_nodes=input_node)
+
+        self._activations_.append(activation)
