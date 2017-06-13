@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from .cost_func import Cost
+from .networks import Network
 from .opts import GradientDescent, Momentum
 
 OPTIMIZERS = {'standard': GradientDescent,
@@ -79,6 +80,9 @@ class Trainer(NetworkTrainer):
                  eval_ival=1,
                  eval_metric=None,
                  verbose=True):
+
+        if issubclass(graph.__class__, Network):
+            graph = graph.graph
 
         self.graph = graph
         self.optimizer = optimizer
@@ -291,7 +295,7 @@ class VisualTrainer(Trainer):
     """
 
     def __init__(self, graph, **kwargs):
-        super(DSGD, self).__init__(graph, verbose=False, **kwargs)
+        super(VisualTrainer, self).__init__(graph, verbose=False, **kwargs)
         self.f = None
         self.ax = None
         self.pars = []

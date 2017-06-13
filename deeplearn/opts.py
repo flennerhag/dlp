@@ -3,12 +3,18 @@ Optimization routines.
 """
 
 import numpy as np
+from .networks import Network
 
 
 class Optimizer(object):
 
     """Optimizer meta class.
     """
+    def __init__(self, graph):
+        if issubclass(graph.__class__, Network):
+            self.graph = graph.graph
+        else:
+            self.graph = graph
 
 
 class GradientDescent(Optimizer):
@@ -17,7 +23,7 @@ class GradientDescent(Optimizer):
     """
 
     def __init__(self, graph, lr=1e-3, decay=0.):
-        self.graph = graph
+        super(GradientDescent, self).__init__(graph)
         self.lr = lr
         self.decay = decay
 
@@ -38,7 +44,8 @@ class Momentum(Optimizer):
     """
 
     def __init__(self, graph, lr=1e-3, u=0.9, decay=0.):
-        self.graph = graph
+
+        super(Momentum, self).__init__(graph)
         self.lr = lr
         self.u = u
         self.decay = decay
@@ -98,7 +105,7 @@ class RMSProp(Optimizer):
     """
 
     def __init__(self, graph, lr=1e-3, u=0.9, decay=0., e=1e-7):
-        self.graph = graph
+        super(RMSProp, self).__init__(graph)
         self.lr = lr
         self.u = u
         self.e = e
@@ -138,7 +145,7 @@ class Adam(Optimizer):
     """
 
     def __init__(self, graph, lr=1e-3, b1=0.9, b2=0.999, decay=0., e=1e-7):
-        self.graph = graph
+        super(Adam, self).__init__(graph)
         self.lr = lr
         self.b1 = b1
         self.b2 = b2

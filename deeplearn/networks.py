@@ -2,8 +2,10 @@
 Simple feed forward network.
 """
 
-from .init import init_bias, init_weights
+from .conv import Convolution, Offset
+from .init import init_bias, init_weights, init_filter
 from .graph import ComputationalGraph, Node
+from .cost_func import Norm, Softmax, BernSig
 from .funcs import MatAdd, MatMul, ReLu, PReLu, Sigmoid, DropOut
 
 
@@ -11,6 +13,10 @@ ACTIVATIONS = {'relu': ReLu,
                'prelu': PReLu,
                'sigmoid': Sigmoid,
                'linear': None}
+
+COST = {'norm': Norm,
+        'softmax': Softmax,
+        'bernsig': BernSig}
 
 
 class Network(object):
@@ -21,8 +27,7 @@ class Network(object):
 
 class Sequential(Network):
 
-    def __init__(self, features):
-        self.features = features
+    def __init__(self):
         self.graph = ComputationalGraph()
 
     def add_fc(self,
@@ -50,20 +55,49 @@ class Sequential(Network):
             node = Node(b, MatAdd())
             self.graph.add_node(node, input_node)
 
-        # Connection
         if dropout:
+            self._connect(dropout_args)
+        self._activate(activation, act_arg)
+
+    def add_conv(self,
+                 filter_size,
+                 n_filters,
+                 stride=1,
+                 pad=1,
+                 bias=True,
+                 input_node=None,
+                 dropout=False,
+                 dropout_args=(0.5, None, False),
+                 activation="relu",
+                 act_arg=None):
+        """Add a convolutional layer."""
+        if input_node is None:
             input_node = self.graph.n_nodes - 1
-            node = Node(None, DropOut(*dropout_args))
+
+        # Convolution
+        W = init_filter(*filter_size, n_filters)
+
+        node = Node(W, Convolution(n_filters, stride, pad))
+        self.graph.add_node(node, input_node)
+
+        # bias (one per filter)
+        if bias:
+            input_node = self.graph.n_nodes - 1
+            b = init_bias(n_filters).ravel()
+            node = Node(b, Offset())
             self.graph.add_node(node, input_node)
 
-        # Activation
-        input_node = self.graph.n_nodes - 1
-        op = ACTIVATIONS[activation]
+        if dropout:
+            self._connect(dropout_args)
 
-        if act_arg is None:
-            node = Node(None, op())
-        else:
-            node = Node(act_arg, op(act_arg))
+        self._activate(activation, act_arg)
+
+    def add_cost(self, cost_type):
+        """Add cost function."""
+        input_node = self.graph.n_nodes - 1
+
+        cost = COST[cost_type]
+        node = Node(None, cost())
         self.graph.add_node(node, input_node)
 
     def predict(self, X):
@@ -73,3 +107,22 @@ class Sequential(Network):
         p = self.graph.nodes[-2].state
         self.graph.clear()
         return p
+
+    def _connect(self, dropout_args):
+        """Add dropout connection."""
+        input_node = self.graph.n_nodes - 1
+
+        node = Node(None, DropOut(*dropout_args))
+        self.graph.add_node(node, input_node)
+
+    def _activate(self, activation, act_arg):
+        """Add activation"""
+        input_node = self.graph.n_nodes - 1
+        op = ACTIVATIONS[activation]
+
+        if act_arg is None:
+            node = Node(None, op())
+        else:
+            node = Node(act_arg, op(act_arg))
+
+        self.graph.add_node(node, input_node)
