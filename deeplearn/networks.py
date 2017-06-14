@@ -2,7 +2,7 @@
 Simple feed forward network.
 """
 
-from .conv import Convolution, Offset
+from .conv import Convolve, ConvStack, Offset
 from .init import init_bias, init_weights, init_filter
 from .graph import ComputationalGraph, Input, Output, Variable, Gate
 from .cost_func import Norm, Softmax, BernSig
@@ -90,26 +90,37 @@ class Sequential(Network):
                  act_arg=None):
         """Add a convolutional layer."""
         if input_node is None:
-            input_node = self.graph.nodes[-1]
+            input_node = self._activations_[-1]
 
-        # Convolution
-        W = init_filter(*filter_size, n_filters)
-        param = Variable(W)
-        self.graph.add_node(param)
+        filters = list()
+        for _ in range(n_filters):
 
-        node = Gate(Convolution(n_filters, stride, pad))
-        self.graph.add_node(node, parent_nodes=[input_node, param])
-
-        # bias (one per filter)
-        if bias:
-            input_node = self.graph.nodes[-1]
-            b = init_bias(n_filters).ravel()
-            param = Variable(b)
+            # Add filter
+            W = init_filter(*filter_size)
+            param = Variable(W)
             self.graph.add_node(param)
 
-            node = Gate(Offset())
-            self.graph.add_node(node, parent_nodes=[input_node, param])
+            # Add convolution
+            conv = Gate(Convolve(stride, pad))
+            self.graph.add_node(conv, parent_nodes=[input_node, param])
 
+            if bias:
+                # bias (one per filter)
+                input_node_b = self.graph.nodes[-1]
+                param = Variable(0)
+                self.graph.add_node(param)
+
+                node = Gate(Offset())
+                self.graph.add_node(node, parent_nodes=[input_node_b, param])
+
+            # Record convolution for stacking
+            filters.append(self.graph.nodes[-1])
+
+        # Stack filter outputs
+        stack = Gate(ConvStack())
+        self.graph.add_node(stack, parent_nodes=filters)
+
+        # Dropout and activation
         if dropout:
             self._connect(dropout_args)
 

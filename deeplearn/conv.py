@@ -4,34 +4,38 @@ Convolutional gates.
 
 import numpy as np
 from numba import jit
-from .funcs import InGate
+from .funcs import InGate, Processing
 
 
-class Convolution(InGate):
+class ConvStack(Processing):
 
-    """Filter gate for performing convolution.
-
-    This gate operates by accepting a large parameter matrix W, and
-    splitting the matrix up along the first dimension to get the number of
-    desired filters.
-
-    For instance, if 10 filters of size 2x2x3 are to be used, this gate
-    expects a filter matrix 20x2x3.
-
-    The gate will output a new map H_2 x W_2 x 10.
-
-    Similarly, during backprop, the gate expects a gradient matrix of shape
-    H_2 x W_2 x 10. The gradient of each filter will be processed
-    separately, and later stacked to a parameter gradient of shape
-    20x2x3.
+    """Stack Convolutions.
     """
 
-    def __init__(self, filters=1, stride=1, pad=1):
-        self.filters = filters
+    def __init__(self):
+        pass
+
+    @jit(nogil=True)
+    def forward(self, *args):
+        """Return 3D array."""
+        return np.dstack(args)
+
+    def backprop(self, X, W, H, G):
+        """Split 3D array."""
+        # This method does not work with @jit. However, it's merely returning
+        # views of G so the computational cost is nil.
+        return [G[:, :, i] for i in range(G.shape[2])]
+
+
+class Convolve(InGate):
+
+    """Gate for convolution."""
+
+    def __init__(self, stride=1, pad=1):
         self.stride = stride
         self.pad = pad
 
-    @jit(nogil=True)
+#    @jit(nogil=True)
     def forward(self, X, W):
         """Forward addition with respect to a parameter matrix W.
 
@@ -46,50 +50,14 @@ class Convolution(InGate):
 
              and P = amount of zero padding while S = stride length.
         """
-        if self.filters > 1:
-            filters = np.vsplit(W, self.filters)
-        else:
-            filters = [W]
+        C, Z, out_shape = self._stretch(X, W)
 
-        out = []
-        for F in filters:
-            C, Z, out_shape = self._stretch(X, F)
-
-            # Convolve and reshape
-            O = C.dot(Z)
-            out.append(O.reshape(*out_shape))
-
-        if len(out) == 1:
-            return out[0]
-        else:
-            return np.dstack(out)
-
-    def backprop(self, X, W, H, G):
-        """Backpropage through all filters."""
-        if self.filters > 1:
-            filters = np.vsplit(W, self.filters)
-            grads = np.dsplit(G, 2)
-            grads = [g.reshape(g.shape[0], g.shape[1]) for g in grads]
-        else:
-            filters = [W]
-            grads = [G]
-
-        dX = None
-        dW = []
-        for F, grad in zip(filters, grads):
-            dx, dw = self._backprop(X, F, None, grad)
-
-            if dX is None:
-                dX = dx
-            else:
-                dX += dx
-
-            dW.append(dw)
-
-        return [dX, np.vstack(dW)]
+        # Convolve and reshape
+        O = C.dot(Z)
+        return O.reshape(*out_shape)
 
     @jit(nogil=True)
-    def _backprop(self, X, W, H, G):
+    def backprop(self, X, W, H, G):
         """Backpropagate through MatMul given incoming gradient G.
 
         Args
@@ -117,6 +85,7 @@ class Convolution(InGate):
 
         return [DX, DW]
 
+    @jit(nogil=True)
     def _stretch(self, X, W):
         """Stretch filter and input for matrix multiplication."""
         # Ravel the filter
@@ -151,6 +120,7 @@ class Convolution(InGate):
 
         return C, np.column_stack(convs), (conv_rows, conv_cols)
 
+    @jit(nogil=True)
     def _collapse(self, dim, Dx, W):
         """Collapse expanded input to original dim.
         """
@@ -175,6 +145,7 @@ class Convolution(InGate):
 
         return V
 
+    @jit(nogil=True)
     def _get_inp_shape(self, X):
         """Get shape for V(X) during backprop."""
         d = X.shape

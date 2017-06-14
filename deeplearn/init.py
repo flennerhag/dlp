@@ -27,7 +27,7 @@ def init_weights(fan_in, fan_out, scale=1, resize=True, den=2, dist=None):
     return W.astype(np.float32)
 
 
-def init_filter(fan_in, fan_out, depth, n_filter,
+def init_filter(fan_in, fan_out, depth,
                 scale=1, resize=True, den=2, dist=None):
     """
     Random initialization of convolution filters .
@@ -43,7 +43,7 @@ def init_filter(fan_in, fan_out, depth, n_filter,
     if dist is None:
         dist = np.random.randn
 
-    W = scale * dist(int(fan_in * n_filter), fan_out, depth)
+    W = scale * dist(fan_in, fan_out, depth)
     if resize:
         W /= np.sqrt(fan_in / den)
 
