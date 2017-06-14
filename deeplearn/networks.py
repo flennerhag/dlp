@@ -90,20 +90,25 @@ class Sequential(Network):
                  act_arg=None):
         """Add a convolutional layer."""
         if input_node is None:
-            input_node = self.graph.n_nodes - 1
+            input_node = self.graph.nodes[-1]
 
         # Convolution
         W = init_filter(*filter_size, n_filters)
+        param = Variable(W)
+        self.graph.add_node(param)
 
         node = Gate(Convolution(n_filters, stride, pad))
-        self.graph.add_node(node, input_node)
+        self.graph.add_node(node, parent_nodes=[input_node, param])
 
         # bias (one per filter)
         if bias:
-            input_node = self.graph.n_nodes - 1
+            input_node = self.graph.nodes[-1]
             b = init_bias(n_filters).ravel()
+            param = Variable(b)
+            self.graph.add_node(param)
+
             node = Gate(Offset())
-            self.graph.add_node(node, input_node)
+            self.graph.add_node(node, parent_nodes=[input_node, param])
 
         if dropout:
             self._connect(dropout_args)

@@ -70,7 +70,7 @@ class ComputationalGraph(object):
                 i = n - i
             yield T[i]
 
-    def get_nodes(self):
+    def get_nodes(self, idx=None):
         """Return list of nodes sorted topologically for forward pass"""
         T = [self.nodes[0]]
 
@@ -93,7 +93,10 @@ class ComputationalGraph(object):
                 if out is not None and out not in T:
                     T.append(out)
 
-        return T
+        if idx is None:
+            return T
+        else:
+            return T[idx]
 
     def forward(self, X, y=None, train=True):
         """Forward pass through graph (topologically).
