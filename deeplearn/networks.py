@@ -6,7 +6,7 @@ from .conv import Convolve, ConvStack, Offset
 from .init import init_bias, init_weights, init_filter
 from .graph import ComputationalGraph, Input, Output, Variable, Gate
 from .cost_func import Norm, Softmax, BernSig
-from .funcs import MatAdd, MatMul, ReLu, PReLu, Sigmoid, DropOut
+from .funcs import MatAdd, MatMul, ReLu, PReLu, Sigmoid, DropOut, Normalize, VecMul
 
 
 ACTIVATIONS = {'relu': ReLu,
@@ -41,6 +41,7 @@ class Sequential(Network):
                fan_out,
                bias=True,
                input_node=None,
+               normalize=False,
                dropout=False,
                dropout_args=(0.5, None, False),
                activation="relu",
@@ -58,6 +59,22 @@ class Sequential(Network):
 
         matmul = Gate(MatMul())
         self.graph.add_node(matmul, parent_nodes=[input_node, param])
+
+        if normalize:
+            # Add normalization gate
+            input_node = self.graph.nodes[-1]
+            norm = Gate(Normalize())
+            self.graph.add_node(norm, parent_nodes=[input_node])
+
+            # Re-parametrize (multiplicatively, bias added later)
+            input_node = self.graph.nodes[-1]
+
+            v = init_bias(fan_out, 1.).ravel()
+            param = Variable(v)
+            self.graph.add_node(param)
+
+            vmul = Gate(VecMul())
+            self.graph.add_node(vmul, parent_nodes=[input_node, param])
 
         if bias:
             input_node = self.graph.nodes[-1]

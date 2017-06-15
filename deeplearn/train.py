@@ -5,7 +5,7 @@ Network trainer classes.
 import numpy as np
 
 from .cost_func import Cost
-from .graph import Gate, Variable, Output, Input
+from .graph import Gate, Variable, Output
 from .networks import Network
 from .opts import GradientDescent, Momentum, Nesterov, RMSProp, Adam
 

@@ -68,7 +68,7 @@ class Sigmoid(Activation):
             [B, None], where B is the backpropagated gradient of ReLu. This is
             the same as G but with b_{ij} = 0 if h_{ij} < 0.
         """
-        return [np.multiply(H, (1 - H)), None]
+        return [np.multiply(H, (1 - H))]
 
 
 class ReLu(Activation):
@@ -110,7 +110,7 @@ class ReLu(Activation):
         """
         V = 1 * (H >= 0)
         O = np.multiply(V, G)
-        return [O, None]
+        return [O]
 
 
 class PReLu(Activation):
@@ -118,11 +118,11 @@ class PReLu(Activation):
     """Gate for RelU activation.
     """
 
-    def __init__(self, alpha=0.01):
-        self.alpha = alpha
+    def __init__(self):
+        pass
 
     @jit(nogil=True)
-    def forward(self, X):
+    def forward(self, X, alpha):
         """Calculate the ReLu in a forward pass.
 
         Args
@@ -133,10 +133,10 @@ class PReLu(Activation):
         Returns
         Relu (array): output array of size [n_samples, n_out_features]
         """
-        return np.fmax(X, self.alpha * X)
+        return np.fmax(X, alpha * X)
 
     @jit(nogil=True)
-    def backprop(self, X, H, G):
+    def backprop(self, X, alpha, H, G):
         """Backpropagate through ReLu given incoming gradient G.
 
         Args
@@ -152,9 +152,55 @@ class PReLu(Activation):
         """
         Hp = 1 * (H >= 0)
         Z = H < 0
-        Hm = self.alpha * Z
+        Hm = alpha * Z
         V = Hp + Hm
         return [np.multiply(V, G), np.multiply(V, Z).mean()]
+
+
+class SeLu(Activation):
+
+    """Gate for SeLu activation.
+    """
+
+    def __init__(self, alpha=0.01):
+        self.alpha = alpha
+
+    @jit(nogil=True)
+    def forward(self, X, alpha):
+        """Calculate the ReLu in a forward pass.
+
+        Args
+        inputs (tuple):
+            X (array): Output to activate
+            W (None): Null argument for compatibility
+
+        Returns
+        Relu (array): output array of size [n_samples, n_out_features]
+        """
+        return np.fmax(X, alpha * X)
+
+    @jit(nogil=True)
+    def backprop(self, X, alpha, H, G):
+        """Backpropagate through ReLu given incoming gradient G.
+
+        Args
+        X (None): Null argument for compatibility
+        W (None): Null argument for compatibility
+        H (array): the value of the ReLu (max{0, A})
+        G (array): Incoming gradient
+
+        Returns
+        dReLu (list):
+            [B, None], where B is the backpropagated gradient of ReLu. This is
+            the same as G but with b_{ij} = 0 if h_{ij} < 0.
+        """
+        Hp = 1 * (H >= 0)
+        Z = H < 0
+        Hm = alpha * Z
+        V = Hp + Hm
+        return [np.multiply(V, G), np.multiply(V, Z).mean()]
+
+
 
 
 ###############################################################################
@@ -222,30 +268,43 @@ class Normalize(Processing):
         self.e = e
         self.u = []
         self.s = []
+        self.train = True
 
     @jit(nogil=True)
     def forward(self, X):
         """Normalize batch before activation."""
-        u = X.mean(axis=0)
-        s = X.std(axis=0)
-        self.u.append(u); self.s.append(s)
-        X -= u
-        X /= (s + self.e)
-        return X
+        if self.train:
+            u = X.mean(axis=0)
+            s = X.std(axis=0)
+            self.u.append(u); self.s.append(s)
+        else:
+            u = np.mean(self.u, axis=0)
+            s = np.mean(self.s, axis=0)
+
+        Y = X - u
+        Y /= (s + self.e)
+        return Y
 
     @jit(nogil=True)
     def backprop(self, X, H, G):
         """Backprop through normalization wrt X."""
+        u = self.u[-1]
+        s = self.s[-1]
+        e = self.e
+        M = X - u
         N = X.shape[0]
-        inv_s = 1 / np.sqrt(self.s[-1] + self.e)
 
-        ds = None
-        dsdx = (2 / N) * ds.dot(X - self.u[-1])
-        du = G.dot(inv_s) + ds.dot()
+        s_inv = (s + e) ** (-1/2)
 
-        dX = G.dot(inv_s) - dsdx + du / N
+        Ds = np.multiply(G, M).sum(axis=0)
+        Ds = np.multiply(Ds, -(1/2) * s_inv ** 3)
 
-        return [dX, None]
+        Du = np.multiply(G.sum(axis=0), -1 * s_inv)
+        Du -= (2 / N) * np.multiply(M.sum(axis=0), Ds)
+
+        Dx = np.multiply(G, s_inv) + (2 / N) * np.multiply(M, Ds) + Du / N
+
+        return [Dx]
 
 
 ###############################################################################
@@ -256,6 +315,47 @@ class InGate(object):
 
     """Meta class for ingoing hidden units.
     """
+    def __init__(self):
+        pass
+
+
+class VecMul(InGate):
+
+    """Matrix to vector broadcasted multiplication.
+
+    Used with batch normalization.
+    """
+    def __init__(self):
+        super(VecMul, self).__init__()
+
+    @jit(nogil=True)
+    def forward(self, X, W):
+        """Forward multiplication with respect to a parameter matrix W.
+
+        Args
+            X (array): Left matrix for multiplication
+            W (array): Right vector for multiplication
+
+        Returns
+            C (array): broadcaster multiplication X * W
+        """
+        return np.multiply(X, W)
+
+    @jit(nogil=True)
+    def backprop(self, X, W, H, G):
+        """Backpropagate through MatMul given incoming gradient G.
+
+        Args
+        X (array): Left matrix from multiplication
+        W (array): Right matrix from multiplication
+        H (None): null argument for compatibility
+        G (array): Incoming gradient
+
+        Returns
+        dVMul (list): [A, B], where A is the derivative wrt X, and B is
+            the derivative wrt W.
+        """
+        return [np.multiply(G, W), np.multiply(G, X).sum(axis=0)]
 
 
 class MatMul(InGate):
@@ -264,7 +364,7 @@ class MatMul(InGate):
     """
 
     def __init__(self):
-        pass
+        super(MatMul, self).__init__()
 
     @jit(nogil=True)
     def forward(self, X, W):
@@ -302,7 +402,7 @@ class MatAdd(InGate):
     """
 
     def __init__(self):
-        pass
+        super(MatAdd, self).__init__()
 
     @jit(nogil=True)
     def forward(self, X, W):

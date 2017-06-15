@@ -55,10 +55,10 @@ STEPSIZE = 10
 def build_net(drop):
     """Build network with or without dropout."""
     net = Sequential()
-    net.add_fc(784, 1500)
-    net.add_fc(1500, 1000, dropout=drop)
-    net.add_fc(1000, 500, dropout=drop)
-    net.add_fc(500, 10)
+    net.add_fc(784, 1500, dropout=True, dropout_args=(0.9, None, False))
+    net.add_fc(1500, 1000, normalize=True, dropout=drop)
+    net.add_fc(1000, 500, normalize=True, dropout=drop)
+    net.add_fc(500, 10, dropout=True, dropout_args=(0.9, None, False))
     net.add_cost("softmax")
 
     return net

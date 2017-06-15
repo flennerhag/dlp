@@ -35,7 +35,7 @@ class Convolve(InGate):
         self.stride = stride
         self.pad = pad
 
-#    @jit(nogil=True)
+    @jit(nogil=True)
     def forward(self, X, W):
         """Forward addition with respect to a parameter matrix W.
 
