@@ -52,13 +52,28 @@ ITERS = 500
 STEPSIZE = 10
 
 
-def build_net(drop):
+def build_net(drop, normalize, activation):
     """Build network with or without dropout."""
     net = Sequential()
-    net.add_fc(784, 1500, dropout=True, dropout_args=(0.9, None, False))
-    net.add_fc(1500, 1000, normalize=True, dropout=drop)
-    net.add_fc(1000, 500, normalize=True, dropout=drop)
-    net.add_fc(500, 10, dropout=True, dropout_args=(0.9, None, False))
+    net.add_fc(784, 1500,
+               dropout=drop, dropout_args=(0.9, None, False),
+               activation=activation)
+
+    net.add_fc(1500, 1000,
+               normalize=normalize,
+               dropout=drop,
+               activation=activation)
+
+    net.add_fc(1000, 500,
+               normalize=normalize,
+               dropout=drop,
+               activation=activation)
+
+    net.add_fc(500, 10,
+               dropout=drop,
+               dropout_args=(0.9, None, False),
+               activation=activation)
+
     net.add_cost("softmax")
 
     return net
@@ -97,7 +112,7 @@ if __name__ == "__main__":
     print("Training Network")
     print("====================")
 
-    net = build_net(True)
+    net = build_net(True, True, "selu")
     opt = RMSProp(net, decay=1e-6)
     trainer = Trainer(net, opt,
                       batch_size=500,

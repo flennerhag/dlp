@@ -133,7 +133,7 @@ class PReLu(Activation):
         Returns
         Relu (array): output array of size [n_samples, n_out_features]
         """
-        return np.fmax(X, alpha * X)
+        return np.where(X >= 0, X, alpha*X)
 
     @jit(nogil=True)
     def backprop(self, X, alpha, H, G):
@@ -150,11 +150,9 @@ class PReLu(Activation):
             [B, None], where B is the backpropagated gradient of ReLu. This is
             the same as G but with b_{ij} = 0 if h_{ij} < 0.
         """
-        Hp = 1 * (H >= 0)
         Z = H < 0
-        Hm = alpha * Z
-        V = Hp + Hm
-        return [np.multiply(V, G), np.multiply(V, Z).mean()]
+        V = np.where(H >= 0, 1, alpha)
+        return [np.multiply(V, G), np.multiply(V, Z).sum()]
 
 
 class SeLu(Activation):
@@ -162,11 +160,14 @@ class SeLu(Activation):
     """Gate for SeLu activation.
     """
 
-    def __init__(self, alpha=0.01):
-        self.alpha = alpha
+    def __init__(self,
+                 l=1.0507009873554804934193349852946,
+                 a=1.6732632423543772848170429916717):
+        self.a = a
+        self.l = l
 
     @jit(nogil=True)
-    def forward(self, X, alpha):
+    def forward(self, X):
         """Calculate the ReLu in a forward pass.
 
         Args
@@ -175,12 +176,12 @@ class SeLu(Activation):
             W (None): Null argument for compatibility
 
         Returns
-        Relu (array): output array of size [n_samples, n_out_features]
+        SeLu (array): output array of size [n_samples, n_out_features]
         """
-        return np.fmax(X, alpha * X)
+        return self.l * np.where(X > 0.0, X, self.a * (np.exp(X) - 1))
 
     @jit(nogil=True)
-    def backprop(self, X, alpha, H, G):
+    def backprop(self, X, H, G):
         """Backpropagate through ReLu given incoming gradient G.
 
         Args
@@ -194,11 +195,8 @@ class SeLu(Activation):
             [B, None], where B is the backpropagated gradient of ReLu. This is
             the same as G but with b_{ij} = 0 if h_{ij} < 0.
         """
-        Hp = 1 * (H >= 0)
-        Z = H < 0
-        Hm = alpha * Z
-        V = Hp + Hm
-        return [np.multiply(V, G), np.multiply(V, Z).mean()]
+        V = np.where(X > 0.0, self.l, self.l * self.a * np.exp(X))
+        return [np.multiply(V, G)]
 
 
 

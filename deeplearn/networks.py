@@ -6,11 +6,13 @@ from .conv import Convolve, ConvStack, Offset
 from .init import init_bias, init_weights, init_filter
 from .graph import ComputationalGraph, Input, Output, Variable, Gate
 from .cost_func import Norm, Softmax, BernSig
-from .funcs import MatAdd, MatMul, ReLu, PReLu, Sigmoid, DropOut, Normalize, VecMul
+from .funcs import MatAdd, MatMul, ReLu, PReLu, Sigmoid, SeLu, \
+    DropOut, Normalize, VecMul
 
 
 ACTIVATIONS = {'relu': ReLu,
                'prelu': PReLu,
+               'selu': SeLu,
                'sigmoid': Sigmoid,
                'linear': None}
 
@@ -174,6 +176,9 @@ class Sequential(Network):
         input_node = [self.graph.nodes[-1]]
         op = ACTIVATIONS[activation]
 
+        if activation == "prelu" and act_arg is None:
+            act_arg= {"alpha": 0}
+
         if act_arg is None:
             activation = Gate(op())
             self.graph.add_node(activation, parent_nodes=input_node)
@@ -184,7 +189,7 @@ class Sequential(Network):
                 input_node.append(param)
                 self.graph.add_node(param)
 
-            activation = Gate(op(**act_arg))
+            activation = Gate(op())
             self.graph.add_node(activation, parent_nodes=input_node)
 
         self._activations_.append(activation)
