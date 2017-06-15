@@ -101,5 +101,6 @@ ENV/
 # pycharm
 .idea/
 
-# Privat folders
+# Private folders
 dev/
+stanford/
