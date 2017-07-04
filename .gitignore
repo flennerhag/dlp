@@ -104,3 +104,6 @@ ENV/
 # Private folders
 dev/
 stanford/
+
+# Data
+*data/
