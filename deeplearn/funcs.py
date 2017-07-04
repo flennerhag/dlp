@@ -80,7 +80,7 @@ class ReLu(Activation):
         pass
 
     @jit(nogil=True)
-    def forward(self, X):
+    def forward(self, inputs):
         """Calculate the ReLu in a forward pass.
 
         Args
@@ -91,10 +91,11 @@ class ReLu(Activation):
         Returns
         Relu (array): output array of size [n_samples, n_out_features]
         """
+        X, = inputs
         return np.maximum(X, 0)
 
     @jit(nogil=True)
-    def backprop(self, X, H, G):
+    def backprop(self, inputs, H, G):
         """Backpropagate through ReLu given incoming gradient G.
 
         Args
@@ -122,7 +123,7 @@ class PReLu(Activation):
         pass
 
     @jit(nogil=True)
-    def forward(self, X, alpha):
+    def forward(self, inputs):
         """Calculate the ReLu in a forward pass.
 
         Args
@@ -133,10 +134,11 @@ class PReLu(Activation):
         Returns
         Relu (array): output array of size [n_samples, n_out_features]
         """
+        X, alpha = inputs
         return np.where(X >= 0, X, alpha*X)
 
     @jit(nogil=True)
-    def backprop(self, X, alpha, H, G):
+    def backprop(self, inputs, H, G):
         """Backpropagate through ReLu given incoming gradient G.
 
         Args
@@ -150,6 +152,7 @@ class PReLu(Activation):
             [B, None], where B is the backpropagated gradient of ReLu. This is
             the same as G but with b_{ij} = 0 if h_{ij} < 0.
         """
+        X, alpha = inputs
         Z = H < 0
         V = np.where(H >= 0, 1, alpha)
         return [np.multiply(V, G), np.multiply(V, Z).sum()]
@@ -167,7 +170,7 @@ class SeLu(Activation):
         self.l = l
 
     @jit(nogil=True)
-    def forward(self, X):
+    def forward(self, inputs):
         """Calculate the ReLu in a forward pass.
 
         Args
@@ -178,10 +181,11 @@ class SeLu(Activation):
         Returns
         SeLu (array): output array of size [n_samples, n_out_features]
         """
+        X, = inputs
         return self.l * np.where(X > 0.0, X, self.a * (np.exp(X) - 1))
 
     @jit(nogil=True)
-    def backprop(self, X, H, G):
+    def backprop(self, inputs, H, G):
         """Backpropagate through ReLu given incoming gradient G.
 
         Args
@@ -195,14 +199,13 @@ class SeLu(Activation):
             [B, None], where B is the backpropagated gradient of ReLu. This is
             the same as G but with b_{ij} = 0 if h_{ij} < 0.
         """
+        X, = inputs
         V = np.where(X > 0.0, self.l, self.l * self.a * np.exp(X))
         return [np.multiply(V, G)]
 
-
-
-
 ###############################################################################
 # Processing
+
 
 class Processing(object):
 
@@ -234,8 +237,9 @@ class DropOut(Processing):
             self.dist = np.random.rand
 
     @jit(nogil=True)
-    def forward(self, X):
+    def forward(self, inputs):
         """Randomly switch samples off."""
+        X, = inputs
         if not self.train:
             return X  # we scale by 1/p during training instead
         else:
@@ -251,7 +255,7 @@ class DropOut(Processing):
             return np.multiply(X, self.W)
 
     @jit(nogil=True)
-    def backprop(self, X, H, G):
+    def backprop(self, inputs, H, G):
         """Backpropagate through Dropout."""
         # We just take the gradient and switch off the inactive units.
         return [np.multiply(self.W, G), None]
@@ -269,8 +273,9 @@ class Normalize(Processing):
         self.train = True
 
     @jit(nogil=True)
-    def forward(self, X):
+    def forward(self, inputs):
         """Normalize batch before activation."""
+        X, = inputs
         if self.train:
             u = X.mean(axis=0)
             s = X.std(axis=0)
@@ -284,8 +289,9 @@ class Normalize(Processing):
         return Y
 
     @jit(nogil=True)
-    def backprop(self, X, H, G):
+    def backprop(self, inputs, H, G):
         """Backprop through normalization wrt X."""
+        X, = inputs
         u = self.u[-1]
         s = self.s[-1]
         e = self.e
@@ -327,7 +333,7 @@ class VecMul(InGate):
         super(VecMul, self).__init__()
 
     @jit(nogil=True)
-    def forward(self, X, W):
+    def forward(self, inputs):
         """Forward multiplication with respect to a parameter matrix W.
 
         Args
@@ -337,10 +343,11 @@ class VecMul(InGate):
         Returns
             C (array): broadcaster multiplication X * W
         """
+        X, W = inputs
         return np.multiply(X, W)
 
     @jit(nogil=True)
-    def backprop(self, X, W, H, G):
+    def backprop(self, inputs, H, G):
         """Backpropagate through MatMul given incoming gradient G.
 
         Args
@@ -353,6 +360,7 @@ class VecMul(InGate):
         dVMul (list): [A, B], where A is the derivative wrt X, and B is
             the derivative wrt W.
         """
+        X, W = inputs
         return [np.multiply(G, W), np.multiply(G, X).sum(axis=0)]
 
 
@@ -365,7 +373,7 @@ class MatMul(InGate):
         super(MatMul, self).__init__()
 
     @jit(nogil=True)
-    def forward(self, X, W):
+    def forward(self, inputs):
         """Forward multiplication with respect to a parameter matrix W.
 
         Args
@@ -375,10 +383,11 @@ class MatMul(InGate):
         Returns
             C (array): product matrix XW
         """
+        X, W = inputs
         return X.dot(W)
 
     @jit(nogil=True)
-    def backprop(self, X, W, H, G):
+    def backprop(self, inputs, H, G):
         """Backpropagate through MatMul given incoming gradient G.
 
         Args
@@ -391,6 +400,7 @@ class MatMul(InGate):
         dMatMul (list): [A, B], where A is the derivative wrt X, and B is
             the derivative wrt W.
         """
+        X, W = inputs
         return [G.dot(W.T), X.T.dot(G)]
 
 
@@ -403,7 +413,7 @@ class MatAdd(InGate):
         super(MatAdd, self).__init__()
 
     @jit(nogil=True)
-    def forward(self, X, W):
+    def forward(self, inputs):
         """Forward addition with respect to a parameter matrix W.
 
         Args
@@ -413,10 +423,11 @@ class MatAdd(InGate):
         Returns
             C (array): sum matrix X + W
         """
+        X, W = inputs
         return X + W
 
     @jit(nogil=True)
-    def backprop(self, X, W, H, G):
+    def backprop(self, inputs, H, G):
         """Backpropagate through MatMul given incoming gradient G.
 
         Args

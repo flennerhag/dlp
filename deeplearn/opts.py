@@ -57,7 +57,7 @@ class Momentum(Optimizer):
 
         for node in self.graph.nodes:
             if isinstance(node, Variable):
-                W[node] = 0
+                W[node] = 0.
 
         return W
 
@@ -89,8 +89,8 @@ class Nesterov(Momentum):
 
             W_ = self.W[node]
 
-            self.W[node] = self.u * self.W[node] - self.lr * node.grad
-            node.state += (1 + self.u) * self.W[node] - self.u * W_
+            self.W[node] = self.u * W_ - self.lr * node.grad
+            node.state += (1. + self.u) * self.W[node] - self.u * W_
 
         self.lr *= (1. - self.decay)
 
@@ -113,7 +113,7 @@ class RMSProp(Optimizer):
         W = dict()
         for node in self.graph.nodes:
             if isinstance(node, Variable):
-                W[node] = 0
+                W[node] = 0.
 
         return W
 
@@ -124,7 +124,7 @@ class RMSProp(Optimizer):
                 continue
 
             W = np.multiply(node.grad, node.grad)
-            self.W[node] = self.u * self.W[node] + (1 - self.u) * W
+            self.W[node] = self.u * self.W[node] + (1. - self.u) * W
 
             x = self.lr * node.grad / (np.sqrt(self.W[node]) + self.e)
             node.state -= x
@@ -145,7 +145,7 @@ class Adam(Optimizer):
         self.e = e
         self.decay = decay
         self.W1, self.W2 = self._initialize()
-        self.i = 1
+        self.i = 1.
 
     def _initialize(self):
         """Set up velocity vectors."""
@@ -153,8 +153,8 @@ class Adam(Optimizer):
         W2 = dict()
         for node in self.graph.nodes:
             if isinstance(node, Variable):
-                W1[node] = 0
-                W2[node] = 0
+                W1[node] = 0.
+                W2[node] = 0.
 
         return W1, W2
 
@@ -165,15 +165,15 @@ class Adam(Optimizer):
                 continue
 
             # First moment
-            m1 = self.b1 * self.W1[node] + (1 - self.b1) * node.grad
-            m1 /= (1 - self.b1**self.i)
+            m1 = self.b1 * self.W1[node] + (1. - self.b1) * node.grad
+            m1 /= (1. - self.b1**self.i)
 
             # Second moment
             grad = np.multiply(node.grad, node.grad)
-            m2 = self.b2 * self.W2[node] + (1 - self.b2) * grad
-            m2 /= (1 - self.b2**self.i)
+            m2 = self.b2 * self.W2[node] + (1. - self.b2) * grad
+            m2 /= (1. - self.b2**self.i)
 
             node.state -= self.lr * m1 / (np.sqrt(m2) + self.e)
 
         self.lr *= (1. - self.decay)
-        self.i += 1
+        self.i += 1.

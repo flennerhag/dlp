@@ -4,7 +4,28 @@ Convolutional gates.
 
 import numpy as np
 from numba import jit
-from .funcs import InGate, Processing
+from deeplearn.funcs import InGate, Processing
+
+
+class Flatten(Processing):
+
+    """Flatten 3D input.
+    """
+
+    def __init__(self):
+        pass
+
+    @jit(nogil=True)
+    def forward(self, inputs):
+        """Return flattened array."""
+        X, = inputs
+        return X.reshape(X.shape[0], -1)
+
+    @jit(nogil=True)
+    def backprop(self, inputs, state, G):
+        """Reshape to 3D array."""
+        X, = inputs
+        return [G.reshape(*X.shape)]
 
 
 class ConvStack(Processing):
@@ -16,15 +37,15 @@ class ConvStack(Processing):
         pass
 
     @jit(nogil=True)
-    def forward(self, *args):
+    def forward(self, inputs):
         """Return 3D array."""
-        return np.dstack(args)
+        return np.concatenate(inputs, 3)
 
-    def backprop(self, X, W, H, G):
+    def backprop(self, inputs, H, G):
         """Split 3D array."""
         # This method does not work with @jit. However, it's merely returning
         # views of G so the computational cost is nil.
-        return [G[:, :, i] for i in range(G.shape[2])]
+        return [G[..., i:i+1] for i in range(G.shape[3])]
 
 
 class Convolve(InGate):
@@ -32,11 +53,12 @@ class Convolve(InGate):
     """Gate for convolution."""
 
     def __init__(self, stride=1, pad=1):
+        super(Convolve, self).__init__()
         self.stride = stride
         self.pad = pad
 
     @jit(nogil=True)
-    def forward(self, X, W):
+    def forward(self, inputs):
         """Forward addition with respect to a parameter matrix W.
 
         Args
@@ -50,14 +72,20 @@ class Convolve(InGate):
 
              and P = amount of zero padding while S = stride length.
         """
+        X, W = inputs
+        assert len(X.shape) == 4
         C, Z, out_shape = self._stretch(X, W)
 
         # Convolve and reshape
-        O = C.dot(Z)
-        return O.reshape(*out_shape)
+        O = np.empty(out_shape)
+        for i in range(X.shape[0]):
+            o = C.dot(Z[i, ...].squeeze())
+            O[i, ...] = o.reshape(*out_shape[1:])
+
+        return O
 
     @jit(nogil=True)
-    def backprop(self, X, W, H, G):
+    def backprop(self, inputs, H, G):
         """Backpropagate through MatMul given incoming gradient G.
 
         Args
@@ -67,17 +95,21 @@ class Convolve(InGate):
         G (array): Incoming gradient
 
         Returns
-        dMatAdd (list): [A, B], where A is G, and B is the derivative wrt W.
+        dConv (list): gradient of the filter
         """
+        X, W = inputs
         C, Z, out_shape = self._stretch(X, W)
 
         # Reshape the gradient to align with the matrix multiplication
-        Q = G.reshape(C.shape[0], Z.shape[1])
-
-        # Get MatMul gradients
-        DW = Q.dot(Z.T)
-        DX = C.T.dot(Q)
-
+        DW = 0
+        DX = list()
+        for i in range(X.shape[0]):
+            Q = G[i, ...].reshape(1, Z.shape[2])
+            # Get MatMul gradients
+            DW += Q.dot(Z[i, ...].squeeze().T)
+            dx = C.T.dot(Q)
+            DX.append(dx)
+        DX = np.vstack(DX)
         DW = DW.reshape(*W.shape)
 
         d = self._get_inp_shape(X)
@@ -85,7 +117,6 @@ class Convolve(InGate):
 
         return [DX, DW]
 
-    @jit(nogil=True)
     def _stretch(self, X, W):
         """Stretch filter and input for matrix multiplication."""
         # Ravel the filter
@@ -93,69 +124,65 @@ class Convolve(InGate):
 
         # Prep the input
         V = X.copy()
-        if len(V.shape) == 1:
-            V = V[..., np.newaxis, np.newaxis]
-        elif len(V.shape) == 2:
-            V = V[..., np.newaxis]
 
         if self.pad:
-            pad = ((self.pad, self.pad), (self.pad, self.pad), (0, 0))
+            pad = ((0, 0), (self.pad, self.pad), (self.pad, self.pad), (0, 0))
             V = np.pad(V, pad, "constant") if self.pad != 0 else X
 
         # Expand input
-        conv_rows = int((V.shape[0] - W.shape[0]) / self.stride + 1)
-        conv_cols = int((V.shape[1] - W.shape[1]) / self.stride + 1)
+        samples = V.shape[0]
+        conv_rows = int((V.shape[1] - W.shape[0]) / self.stride + 1)
+        conv_cols = int((V.shape[2] - W.shape[1]) / self.stride + 1)
 
-        c = 0
         convs = []
-        for j in range(0, V.shape[0] - W.shape[0] + self.stride, self.stride):
-            for i in range(0, V.shape[1] - W.shape[1] + self.stride,
-                           self.stride):
+        for j in range(0, V.shape[1] - W.shape[0] + self.stride, self.stride):
+            for i in range(0, V.shape[2] - W.shape[1] + self.stride, self.stride):
 
                 start_row, stop_row = j, j + W.shape[0]
                 start_col, stop_col = i, i + W.shape[1]
-                z = V[start_row:stop_row, start_col:stop_col, :].ravel()
+
+                z = V[:, start_row:stop_row, start_col:stop_col, :]
+                z = z.reshape(samples, -1)
                 convs.append(z)
-                c += 1
 
-        return C, np.column_stack(convs), (conv_rows, conv_cols)
+        try:
+            Z = np.stack(convs, 2)
+        except ValueError:
+            raise ValueError("Incompatible filter dimensions (%s, %s) for "
+                             "input of size." % (X.shape[1] + self.pad,
+                                                 X.shape[2] + self.pad))
 
-    @jit(nogil=True)
+        return C, Z, (samples, conv_rows, conv_cols, 1)
+
     def _collapse(self, dim, Dx, W):
         """Collapse expanded input to original dim.
         """
-        V = np.empty(dim)
+        V = np.zeros(dim, dtype=np.float32)
 
         c = 0
-        for j in range(0, V.shape[0] - W.shape[0] + self.stride, self.stride):
-            for i in range(0, V.shape[1] - W.shape[1] + self.stride,
-                           self.stride):
+        for j in range(0, V.shape[1] - W.shape[0] + self.stride, self.stride):
+            for i in range(0, V.shape[2] - W.shape[1] + self.stride, self.stride):
 
-                z = Dx[:, c]
+                z = Dx[..., c]
 
                 start_col, stop_col = i, i + W.shape[1]
                 start_row, stop_row = j, j + W.shape[0]
-                r = V[start_row:stop_row, start_col:stop_col, :]
-                r += z.reshape(*r.shape)
+                r = V[:, start_row:stop_row, start_col:stop_col, :]
+                V[:, start_row:stop_row, start_col:stop_col, :] = z.reshape(*r.shape)
 
                 c += 1
 
         if self.pad:
-            V = V[self.pad:-self.pad, self.pad:-self.pad, :]
+            V = V[:, self.pad:-self.pad, self.pad:-self.pad, :]
 
         return V
 
-    @jit(nogil=True)
     def _get_inp_shape(self, X):
         """Get shape for V(X) during backprop."""
         d = X.shape
-        if len(d) == 1:
-            d = (d, 1, 1)
-        elif len(d) == 2:
-            d = (d[0], d[1], 1)
 
         if self.pad:
-            d = (d[0] + 2 * self.pad, d[1] + 2 * self.pad, d[2])
+            d = (d[0], d[1] + 2 * self.pad, d[2] + 2 * self.pad, d[3])
 
         return d
 
@@ -166,10 +193,10 @@ class Offset(InGate):
     """
 
     def __init__(self):
-        pass
+        super(Offset, self).__init__()
 
     @jit(nogil=True)
-    def forward(self, X, W):
+    def forward(self, inputs):
         """Add bias to each of n filter.
 
         Args
@@ -179,31 +206,22 @@ class Offset(InGate):
         Returns
             H (array): X + W, where addition is on the third dimension.
         """
-        if len(X.shape) == 2:
-            return X + W
-        else:
-            assert X.shape[2] == W.shape[0]
+        X, W = inputs
+        assert X.shape[3] == W.shape[1]
 
-            C = X.copy()
-            for i in range(W.shape[0]):
-                C[:, :, i] += W[i]
+        C = X.copy()
+        for i in range(W.shape[0]):
+            C[..., i] += W[0, i]
 
             return C
 
     @jit(nogil=True)
-    def backprop(self, X, W, H, G):
+    def backprop(self, inputs, H, G):
         """Backpropagate through the bias."""
-        if len(X.shape) == 2:
-            # Standard MatAdd
-            dW = np.ones((1, G.shape[0]))
-            return [G, dW.dot(G)]
+        _, W = inputs
+        grads = []
+        for i in range(W.shape[1]):
+            g = G[..., i]
+            grads.append(g.sum())
 
-        else:
-            # Get gradient for each filter
-            grads = []
-            for i in range(W.shape[0]):
-                g = G[:, :, i]
-                dW = np.ones((1, g.shape[0]))
-                grads.append(dW.dot(g))
-
-            return [G, np.array(grads)]
+        return [G, np.array(grads)]

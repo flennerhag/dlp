@@ -2,7 +2,7 @@
 Simple feed forward network.
 """
 
-from .conv import Convolve, ConvStack, Offset
+from .conv import Convolve, ConvStack, Offset, Flatten
 from .init import init_bias, init_weights, init_filter
 from .graph import ComputationalGraph, Input, Output, Variable, Gate
 from .cost_func import Norm, Softmax, BernSig
@@ -46,9 +46,11 @@ class Sequential(Network):
                normalize=False,
                dropout=False,
                dropout_args=(0.5, None, False),
-               activation="relu",
+               activation=None,
                act_arg=None):
         """Add fully connected layer to network."""
+        if input_node is None:
+            input_node = self.graph.nodes[-1]
 
         # Add weight matrix parameter to graph
         W = init_weights(fan_in, fan_out)
@@ -56,9 +58,6 @@ class Sequential(Network):
         self.graph.add_node(param)
 
         # Add MatMul Gate to graph
-        if input_node is None:
-            input_node = self._activations_[-1]
-
         matmul = Gate(MatMul())
         self.graph.add_node(matmul, parent_nodes=[input_node, param])
 
@@ -94,7 +93,8 @@ class Sequential(Network):
             self._connect(dropout_args)
 
         # Add activation
-        self._activate(activation, act_arg)
+        if activation:
+            self._activate(activation, act_arg)
 
     def add_conv(self,
                  filter_size,
@@ -105,32 +105,25 @@ class Sequential(Network):
                  input_node=None,
                  dropout=False,
                  dropout_args=(0.5, None, False),
-                 activation="relu",
+                 activation=None,
                  act_arg=None):
         """Add a convolutional layer."""
         if input_node is None:
-            input_node = self._activations_[-1]
+            input_node = self.graph.nodes[-1]
 
         filters = list()
+        params = list()
+        weights = list()
         for _ in range(n_filters):
 
             # Add filter
-            W = init_filter(*filter_size)
-            param = Variable(W)
-            self.graph.add_node(param)
+            weights.append(init_filter(*filter_size))
+            params.append(Variable(weights[-1]))
+            self.graph.add_node(params[-1])
 
             # Add convolution
-            conv = Gate(Convolve(stride, pad))
-            self.graph.add_node(conv, parent_nodes=[input_node, param])
-
-            if bias:
-                # bias (one per filter)
-                input_node_b = self.graph.nodes[-1]
-                param = Variable(0)
-                self.graph.add_node(param)
-
-                node = Gate(Offset())
-                self.graph.add_node(node, parent_nodes=[input_node_b, param])
+            self.graph.add_node(Gate(Convolve(stride, pad)),
+                                parent_nodes=[input_node, params[-1]])
 
             # Record convolution for stacking
             filters.append(self.graph.nodes[-1])
@@ -139,20 +132,39 @@ class Sequential(Network):
         stack = Gate(ConvStack())
         self.graph.add_node(stack, parent_nodes=filters)
 
+        if bias:
+            # bias (one per filter)
+            input_node_b = self.graph.nodes[-1]
+            param_b = Variable(init_bias(n_filters))
+            self.graph.add_node(param_b)
+
+            off_node = Gate(Offset())
+            self.graph.add_node(off_node, parent_nodes=[input_node_b, param_b])
+
         # Dropout and activation
         if dropout:
             self._connect(dropout_args)
 
-        self._activate(activation, act_arg)
+        if activation:
+            self._activate(activation, act_arg)
+
+    def add_flatten(self, input_node=None):
+        # Flatten
+        if input_node is None:
+            input_node = self.graph.nodes[-1]
+
+        flatten = Gate(Flatten())
+        self.graph.add_node(flatten, parent_nodes=[input_node])
 
     def add_cost(self, cost_type):
         """Add cost function."""
+        input_node = self.graph.nodes[-1]
+
         label_node = Output()
         self.graph.add_node(label_node)
 
         cost = COST[cost_type]()
         cost = Gate(cost)
-        input_node = self._activations_[-1]
 
         self.graph.add_node(cost, parent_nodes=[input_node, label_node])
 

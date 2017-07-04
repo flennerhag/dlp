@@ -5,7 +5,7 @@ Initialization routines.
 import numpy as np
 
 
-def init_weights(fan_in, fan_out, scale=1, resize=True, den=2, dist=None):
+def init_weights(fan_in, fan_out, scale=1., resize=True, den=2., dist=None):
     """
     Random initialization of weight matrix.
 
@@ -28,7 +28,7 @@ def init_weights(fan_in, fan_out, scale=1, resize=True, den=2, dist=None):
 
 
 def init_filter(fan_in, fan_out, depth,
-                scale=1, resize=True, den=2, dist=None):
+                scale=1., resize=True, den=2., dist=None):
     """
     Random initialization of convolution filters .
 

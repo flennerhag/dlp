@@ -19,7 +19,6 @@ class ComputationalGraph(object):
 
     def __init__(self):
         self.flag = 0
-        self.n_nodes = 0
         self.nodes = list()
         self._input_nodes = list()
         self._output_nodes = list()
@@ -51,9 +50,6 @@ class ComputationalGraph(object):
         # Add node to graph
         self.nodes.append(node)
 
-        # Increment counter
-        self.n_nodes += 1
-
     def sorted_topologically(self, reverse=False):
 
         """Generates nodes according to forward dependencies.
@@ -63,18 +59,19 @@ class ComputationalGraph(object):
 
         """
         T = self.get_nodes()
-        n = len(T) - 1
+        N = self.n_nodes()
 
-        for i in range(self.n_nodes):
+        for i in range(N):
             if reverse:
-                i = n - i
+                i = N - i - 1
             yield T[i]
 
     def get_nodes(self, idx=None):
         """Return list of nodes sorted topologically for forward pass"""
+        N = self.n_nodes()
         T = [self.nodes[0]]
 
-        for i in range(self.n_nodes):
+        for i in range(N):
             n = T[i]
             outputs = n.get_output()
 
@@ -138,6 +135,10 @@ class ComputationalGraph(object):
             for n in self._output_nodes:
                 n.state = y
 
+    def n_nodes(self):
+        "Number of nodes in graph"
+        return len(self.nodes)
+
     def clear(self):
         """Clear cache."""
         self.flag = 0
@@ -199,7 +200,8 @@ class Node(object):
             return out[0]
         else:
             # Can happen for gates of variables if several consumers
-            return np.add(*out)
+            s = sum(out)
+            return s
 
 
 class Input(Node):
@@ -283,8 +285,7 @@ class Gate(Node):
 
         if hasattr(self.operation, "train"):
             self.operation.train = train
-
-        self.state = self.operation.forward(*inputs)
+        self.state = self.operation.forward(inputs)
 
     def backprop(self):
         """Backpropagate through the node."""
@@ -292,7 +293,7 @@ class Gate(Node):
         state = self.state
         grad = self.get_grad()
 
-        grad = self.operation.backprop(*inputs, state, grad)
+        grad = self.operation.backprop(inputs, state, grad)
         self.grad = dict(zip(self.inputs, grad))
 
     def clear(self):
